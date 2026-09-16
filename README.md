@@ -19,7 +19,7 @@
 - [x] SLO（サービスレベル目標）の定義およびエラー予算（Error Budget）の監視運用
 
 ### フェーズ 3：API完成 & 認証 & テスト
-- [ ] 残API実装（タスクの更新・削除、タグのCRUD）
+- [x] 残API実装（タスクの更新・削除、タグのCRUD）
 - [ ] JWT認証の実装（ログイン・トークン検証・ミドルウェア）
 - [ ] ユニットテスト・統合テスト（`testing` パッケージ + `testcontainers`）
 - [ ] APIドキュメント整備（OpenAPI / Swagger）
@@ -57,3 +57,4 @@
 - [`docs/db/erd.md`](docs/db/erd.md): ER図
 - [`docs/PROMETHEUS_METRICS.md`](docs/PROMETHEUS_METRICS.md): Prometheusメトリクス定義書
 - [`docs/SLO.md`](docs/SLO.md): SLO / エラー予算 定義書
+- [`docs/HANDOVER.md`](docs/HANDOVER.md): 引継ぎドキュメント（開発進捗・次のステップ）
