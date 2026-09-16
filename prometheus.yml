@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'kanban-monitor'
+
+# Alertmanager configuration (optional, for future use)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# SLO Recording Rules & Alerting Rules
+rule_files:
+  - /etc/prometheus/slo_rules.yml
+  - /etc/prometheus/alert_rules.yml
+
+scrape_configs:
+  - job_name: "my-kanban-app"
+    scrape_interval: 5s  # API のメトリクスは高頻度で取得
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api:8080"]
+        labels:
+          instance: "api-server"
+          service: "kanban-api"
+
