@@ -40,3 +40,5 @@
 - [`docs/db/tasks.md`](docs/db/tasks.md): tasksテーブル定義書
 - [`docs/db/tags.md`](docs/db/tags.md): tags / task_tagsテーブル定義書
 - [`docs/db/erd.md`](docs/db/erd.md): ER図
+- [`docs/PROMETHEUS_METRICS.md`](docs/PROMETHEUS_METRICS.md): Prometheusメトリクス定義書
+- [`docs/SLO.md`](docs/SLO.md): SLO / エラー予算 定義書

@@ -1,0 +1,115 @@
+groups:
+  - name: slo_recording_rules
+    interval: 30s
+    rules:
+      # ============================================================
+      # SLO 1: Availability（可用性）
+      # 目標: 99.9% のリクエストが 5xx 以外で返る
+      # エラー = status が 5xx のリクエスト
+      # ============================================================
+
+      # 直近5分間のエラーレート（5xxの割合）
+      - record: job:http_requests:error_rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_requests_total[5m])) by (job)
+
+      # 直近1時間のエラーレート
+      - record: job:http_requests:error_rate1h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[1h])) by (job)
+          /
+          sum(rate(http_requests_total[1h])) by (job)
+
+      # 直近6時間のエラーレート
+      - record: job:http_requests:error_rate6h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[6h])) by (job)
+          /
+          sum(rate(http_requests_total[6h])) by (job)
+
+      # 直近24時間のエラーレート
+      - record: job:http_requests:error_rate24h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[24h])) by (job)
+          /
+          sum(rate(http_requests_total[24h])) by (job)
+
+      # 可用性SLO達成率（1 - エラーレート）直近5分
+      - record: job:slo_availability:ratio5m
+        expr: |
+          1 - job:http_requests:error_rate5m
+
+      # 可用性SLO達成率 直近1時間
+      - record: job:slo_availability:ratio1h
+        expr: |
+          1 - job:http_requests:error_rate1h
+
+      # 可用性SLO達成率 直近24時間
+      - record: job:slo_availability:ratio24h
+        expr: |
+          1 - job:http_requests:error_rate24h
+
+      # ============================================================
+      # SLO 2: Latency（レイテンシ）
+      # 目標: 95% のリクエストが 500ms 以内に完了する（p95 < 500ms）
+      # ============================================================
+
+      # p95レイテンシ（直近5分）
+      - record: job:http_request_duration_seconds:p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{path!="/metrics"}[5m])) by (job, le)
+          )
+
+      # p99レイテンシ（直近5分）
+      - record: job:http_request_duration_seconds:p99_5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket{path!="/metrics"}[5m])) by (job, le)
+          )
+
+      # レイテンシSLO達成率: 500ms以内に完了したリクエストの割合（直近5分）
+      - record: job:slo_latency:ratio5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[5m])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[5m])) by (job)
+
+      # レイテンシSLO達成率（直近1時間）
+      - record: job:slo_latency:ratio1h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[1h])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[1h])) by (job)
+
+      # レイテンシSLO達成率（直近24時間）
+      - record: job:slo_latency:ratio24h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[24h])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[24h])) by (job)
+
+      # ============================================================
+      # エラー予算
+      # 30日間のエラー予算消費率
+      # SLO 99.9% → 許容エラー率 0.1% → 月間 43.8分のダウンタイム相当
+      # ============================================================
+
+      # エラー予算消費率（直近1時間のエラーレートが月間SLOに対してどれだけ消費しているか）
+      - record: job:error_budget:burn_rate1h
+        expr: |
+          job:http_requests:error_rate1h / 0.001
+
+      # エラー予算消費率（直近6時間）
+      - record: job:error_budget:burn_rate6h
+        expr: |
+          job:http_requests:error_rate6h / 0.001
+
+      # エラー予算消費率（直近24時間）
+      - record: job:error_budget:burn_rate24h
+        expr: |
+          job:http_requests:error_rate24h / 0.001

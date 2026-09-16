@@ -9,6 +9,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
@@ -16,5 +21,45 @@ services:
       - "16686:16686"  # Jaeger UI
       - "4318:4318"    # OTLP HTTP receiver
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./slo_rules.yml:/etc/prometheus/slo_rules.yml
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana-dashboard.json:/etc/grafana/dashboards/kanban.json
+    depends_on:
+      - prometheus
+
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: host=db port=5432 user=kanban password=kanban dbname=kanban_dev sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    volumes:
+      - ./db/init.sql:/app/db/init.sql
+
 volumes:
   postgres_data:
+  grafana_data:

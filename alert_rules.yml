@@ -1,0 +1,104 @@
+groups:
+  - name: slo_alerts
+    rules:
+      # ============================================================
+      # エラー予算 アラート（Multi-window, Multi-burn-rate）
+      # Google SRE Workbook の手法に基づく
+      # ============================================================
+
+      # Critical: エラー予算の急激な消費（1時間で月間予算の14倍速で燃焼）
+      # 1時間で月間エラー予算の 2% 以上を消費する場合
+      - alert: ErrorBudgetBurnCritical
+        expr: |
+          job:error_budget:burn_rate1h > 14
+          and
+          job:error_budget:burn_rate6h > 14
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "エラー予算が急激に消費されています ({{ $labels.job }})"
+          description: |
+            エラー予算の消費速度が通常の14倍を超えています。
+            現在のエラーレート: {{ $value | humanizePercentage }}
+            このまま継続すると1時間以内に月間エラー予算の2%を消費します。
+
+      # Warning: エラー予算の早期消費（6時間で月間予算の6倍速で燃焼）
+      - alert: ErrorBudgetBurnHigh
+        expr: |
+          job:error_budget:burn_rate1h > 6
+          and
+          job:error_budget:burn_rate6h > 6
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "エラー予算の消費速度が高い ({{ $labels.job }})"
+          description: |
+            エラー予算の消費速度が通常の6倍を超えています。
+            現在のエラーレート: {{ $value | humanizePercentage }}
+            このまま継続すると6時間以内に月間エラー予算の5%を消費します。
+
+      # Info: エラー予算の緩やかな消費（24時間で月間予算の3倍速で燃焼）
+      - alert: ErrorBudgetBurnLow
+        expr: |
+          job:error_budget:burn_rate6h > 3
+          and
+          job:error_budget:burn_rate24h > 3
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "エラー予算が緩やかに消費されています ({{ $labels.job }})"
+          description: |
+            エラー予算の消費速度が通常の3倍を超えています。
+            現在のエラーレート: {{ $value | humanizePercentage }}
+
+      # ============================================================
+      # レイテンシ アラート
+      # ============================================================
+
+      # p95レイテンシがSLO閾値（500ms）を超えた場合
+      - alert: LatencySLOViolation
+        expr: |
+          job:http_request_duration_seconds:p95_5m > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "レイテンシSLOが違反されています ({{ $labels.job }})"
+          description: |
+            p95レイテンシが500msを超えています。
+            現在のp95: {{ $value | humanizeDuration }}
+            SLO目標: 500ms以内
+
+      # p99レイテンシが1秒を超えた場合
+      - alert: LatencyP99High
+        expr: |
+          job:http_request_duration_seconds:p99_5m > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99レイテンシが1秒を超えています ({{ $labels.job }})"
+          description: |
+            p99レイテンシが1秒を超えています。
+            現在のp99: {{ $value | humanizeDuration }}
+
+      # ============================================================
+      # 可用性 アラート
+      # ============================================================
+
+      # 直近5分の可用性がSLO（99.9%）を下回った場合
+      - alert: AvailabilitySLOViolation
+        expr: |
+          job:slo_availability:ratio5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "可用性SLOが違反されています ({{ $labels.job }})"
+          description: |
+            直近5分の可用性が99.9%を下回っています。
+            現在の可用性: {{ $value | humanizePercentage }}
+            SLO目標: 99.9%以上
