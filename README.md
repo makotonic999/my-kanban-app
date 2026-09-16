@@ -8,10 +8,10 @@
 ## 🗺 開発ロードマップ
 
 ### フェーズ 1：DBの基礎とシンプルカンバンボード構築
-- [ ] Docs as Code（Markdownによるテーブル定義書・ER図のGitHub管理）
-- [ ] データモデリング（1:N, N:M リレーション、正規化）
-- [ ] Go + PostgreSQL によるシンプルなカンバンボードWeb API構築
-- [ ] インデックス基礎（B-Tree）と基本クエリの実行計画（`EXPLAIN`）確認
+- [x] Docs as Code（Markdownによるテーブル定義書・ER図のGitHub管理）
+- [x] データモデリング（1:N, N:M リレーション、正規化）
+- [x] Go + PostgreSQL によるシンプルなカンバンボードWeb API構築
+- [x] インデックス基礎（B-Tree）と基本クエリの実行計画（`EXPLAIN`）確認
 
 ### フェーズ 2：SRE & オブザーバビリティ追加
 - [ ] OpenTelemetry を用いた Go API および DBクエリのトレーシング導入
@@ -36,4 +36,7 @@
 ---
 
 ## 📂 ドキュメント構成 (`/docs`)
-- `docs/db/`: DB設計書・テーブル定義書
+- [`docs/db/users.md`](docs/db/users.md): usersテーブル定義書
+- [`docs/db/tasks.md`](docs/db/tasks.md): tasksテーブル定義書
+- [`docs/db/tags.md`](docs/db/tags.md): tags / task_tagsテーブル定義書
+- [`docs/db/erd.md`](docs/db/erd.md): ER図
