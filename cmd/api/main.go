@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,12 +10,23 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/makotonic999/my-kanban-app/internal/db"
 	"github.com/makotonic999/my-kanban-app/internal/handler"
+	"github.com/makotonic999/my-kanban-app/internal/telemetry"
 )
 
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	// トレーサーを初期化してJaegerに接続
+	ctx := context.Background()
+	tp, err := telemetry.NewTracerProvider(ctx, os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	// アプリ終了時にトレースを全部送信してから閉じる
+	defer tp.Shutdown(ctx)
+
 	dsn := os.Getenv("DATABASE_URL")
 	database := db.New(dsn)
 	defer database.Close()
