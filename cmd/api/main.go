@@ -33,12 +33,21 @@ func main() {
 
 	taskHandler := &handler.TaskHandler{DB: database}
 	userHandler := &handler.UserHandler{DB: database}
+	tagHandler := &handler.TagHandler{DB: database}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /users", userHandler.Create)
 	mux.HandleFunc("GET /tasks", taskHandler.List)
 	mux.HandleFunc("POST /tasks", taskHandler.Create)
+	mux.HandleFunc("GET /tasks/{id}", taskHandler.GetByID)
+	mux.HandleFunc("PATCH /tasks/{id}", taskHandler.Update)
+	mux.HandleFunc("DELETE /tasks/{id}", taskHandler.Delete)
 	mux.HandleFunc("PATCH /tasks/{id}/complete", taskHandler.Complete)
+	mux.HandleFunc("POST /tasks/{id}/tags", taskHandler.AddTag)
+	mux.HandleFunc("DELETE /tasks/{id}/tags/{tag_id}", taskHandler.RemoveTag)
+	mux.HandleFunc("GET /users/{user_id}/tags", tagHandler.List)
+	mux.HandleFunc("POST /tags", tagHandler.Create)
+	mux.HandleFunc("DELETE /tags/{id}", tagHandler.Delete)
 	// Prometheusがメトリクスを収集するエンドポイント
 	mux.Handle("GET /metrics", promhttp.Handler())
 
