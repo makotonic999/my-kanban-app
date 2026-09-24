@@ -1,0 +1,535 @@
+openapi: 3.0.3
+info:
+  title: my-kanban-app API
+  description: |
+    個人用 AI 統合型カンバンボードの Web API。
+
+    ## 認証
+    タスク系・タグ系エンドポイントは JWT (Bearer) 認証が必須です。
+    `POST /login` でトークンを取得し、`Authorization: Bearer <token>` ヘッダで送信してください。
+
+    未保護エンドポイント: `POST /users`（登録）, `POST /login`, `GET /metrics`。
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発環境
+
+tags:
+  - name: auth
+    description: 認証（登録・ログイン）
+  - name: tasks
+    description: タスク CRUD とタスク-タグ関連
+  - name: tags
+    description: タグ CRUD
+  - name: ops
+    description: 運用（メトリクス）
+
+paths:
+  /users:
+    post:
+      tags: [auth]
+      summary: ユーザー登録
+      description: 新規ユーザーを作成する。パスワードは bcrypt でハッシュ化して保存される。未保護。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /login:
+    post:
+      tags: [auth]
+      summary: ログイン（トークン発行）
+      description: |
+        email/password を検証し、成功時に JWT を返す。
+        ユーザー不在でもパスワード不一致でも同一の 401 を返す（ユーザー列挙対策）。未保護。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 認証成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks:
+    get:
+      tags: [tasks]
+      summary: タスク一覧取得
+      responses:
+        '200':
+          description: タスク配列（created_at 降順）
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [tasks]
+      summary: タスク作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [tasks]
+      summary: タスク取得（ID指定）
+      responses:
+        '200':
+          description: 該当タスク
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [tasks]
+      summary: タスク更新（部分更新）
+      description: 送信されたフィールドのみ更新する。全フィールド任意。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: 更新後のタスク
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [tasks]
+      summary: タスク削除
+      responses:
+        '204':
+          description: 削除成功（本文なし）
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    patch:
+      tags: [tasks]
+      summary: タスク完了
+      description: status を done にし、completed_at を現在時刻に設定する。
+      responses:
+        '200':
+          description: 完了後のタスク
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}/tags:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [tasks]
+      summary: タスクにタグを付与
+      description: 既に付与済みの場合は何もしない（冪等）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag_id]
+              properties:
+                tag_id:
+                  type: integer
+                  format: int64
+                  example: 3
+      responses:
+        '204':
+          description: 付与成功（本文なし）
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}/tags/{tag_id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [tasks]
+      summary: タスクからタグを外す
+      responses:
+        '204':
+          description: 削除成功（本文なし）
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{user_id}/tags:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags: [tags]
+      summary: ユーザーのタグ一覧取得
+      responses:
+        '200':
+          description: タグ配列（name 昇順）
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tags:
+    post:
+      tags: [tags]
+      summary: タグ作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [tags]
+      summary: タグ削除
+      responses:
+        '204':
+          description: 削除成功（本文なし）
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /metrics:
+    get:
+      tags: [ops]
+      summary: Prometheus メトリクス
+      description: Prometheus 形式のメトリクスを返す。未保護。
+      security: []
+      responses:
+        '200':
+          description: Prometheus テキスト形式
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'POST /login で取得した JWT を "Authorization: Bearer <token>" で送信する。'
+
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: リクエストが不正
+      content:
+        text/plain:
+          schema:
+            type: string
+    Unauthorized:
+      description: 認証が必要 / トークンが無効
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: invalid token
+    NotFound:
+      description: リソースが存在しない
+      content:
+        text/plain:
+          schema:
+            type: string
+    InternalError:
+      description: サーバー内部エラー
+      content:
+        text/plain:
+          schema:
+            type: string
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: password123
+        display_name:
+          type: string
+          nullable: true
+          example: Test User
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: password123
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: HS256 署名 JWT（有効期限 24 時間）
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          example: todo
+          description: "todo / in_progress / done など"
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_minutes:
+          type: integer
+          nullable: true
+        actual_minutes:
+          type: integer
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTaskRequest:
+      type: object
+      required: [user_id, title]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+          example: Buy groceries
+        description:
+          type: string
+          nullable: true
+        estimated_minutes:
+          type: integer
+          nullable: true
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+
+    UpdateTaskRequest:
+      type: object
+      description: すべて任意。送信したフィールドのみ更新される。
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_minutes:
+          type: integer
+          nullable: true
+        actual_minutes:
+          type: integer
+          nullable: true
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateTagRequest:
+      type: object
+      required: [user_id, name]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: work
+
+# デフォルトで全エンドポイントに Bearer 認証を要求。
+# 未保護エンドポイントは各operationで security: [] を指定して上書きしている。
+security:
+  - bearerAuth: []

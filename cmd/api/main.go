@@ -34,22 +34,34 @@ func main() {
 	taskHandler := &handler.TaskHandler{DB: database}
 	userHandler := &handler.UserHandler{DB: database}
 	tagHandler := &handler.TagHandler{DB: database}
+	authHandler := &handler.AuthHandler{DB: database}
 
 	mux := http.NewServeMux()
+
+	// protect は保護対象ルートを RequireAuth で包むためのヘルパー。
+	// http.HandlerFunc を http.Handler に変換してミドルウェアでラップする。
+	protect := func(h http.HandlerFunc) http.Handler {
+		return middleware.RequireAuth(http.HandlerFunc(h))
+	}
+
+	// --- 未保護エンドポイント（登録・ログイン・メトリクス） ---
 	mux.HandleFunc("POST /users", userHandler.Create)
-	mux.HandleFunc("GET /tasks", taskHandler.List)
-	mux.HandleFunc("POST /tasks", taskHandler.Create)
-	mux.HandleFunc("GET /tasks/{id}", taskHandler.GetByID)
-	mux.HandleFunc("PATCH /tasks/{id}", taskHandler.Update)
-	mux.HandleFunc("DELETE /tasks/{id}", taskHandler.Delete)
-	mux.HandleFunc("PATCH /tasks/{id}/complete", taskHandler.Complete)
-	mux.HandleFunc("POST /tasks/{id}/tags", taskHandler.AddTag)
-	mux.HandleFunc("DELETE /tasks/{id}/tags/{tag_id}", taskHandler.RemoveTag)
-	mux.HandleFunc("GET /users/{user_id}/tags", tagHandler.List)
-	mux.HandleFunc("POST /tags", tagHandler.Create)
-	mux.HandleFunc("DELETE /tags/{id}", tagHandler.Delete)
+	mux.HandleFunc("POST /login", authHandler.Login)
 	// Prometheusがメトリクスを収集するエンドポイント
 	mux.Handle("GET /metrics", promhttp.Handler())
+
+	// --- 保護対象エンドポイント（要 Bearer トークン） ---
+	mux.Handle("GET /tasks", protect(taskHandler.List))
+	mux.Handle("POST /tasks", protect(taskHandler.Create))
+	mux.Handle("GET /tasks/{id}", protect(taskHandler.GetByID))
+	mux.Handle("PATCH /tasks/{id}", protect(taskHandler.Update))
+	mux.Handle("DELETE /tasks/{id}", protect(taskHandler.Delete))
+	mux.Handle("PATCH /tasks/{id}/complete", protect(taskHandler.Complete))
+	mux.Handle("POST /tasks/{id}/tags", protect(taskHandler.AddTag))
+	mux.Handle("DELETE /tasks/{id}/tags/{tag_id}", protect(taskHandler.RemoveTag))
+	mux.Handle("GET /users/{user_id}/tags", protect(tagHandler.List))
+	mux.Handle("POST /tags", protect(tagHandler.Create))
+	mux.Handle("DELETE /tags/{id}", protect(tagHandler.Delete))
 
 	// メトリクスミドルウェアを適用
 	handlerWithMetrics := middleware.MetricsMiddleware(mux)
