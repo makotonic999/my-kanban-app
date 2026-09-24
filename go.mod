@@ -3,6 +3,8 @@ module github.com/makotonic999/my-kanban-app
 go 1.27.0
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
 	github.com/prometheus/client_golang v1.24.1

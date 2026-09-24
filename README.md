@@ -20,9 +20,9 @@
 
 ### フェーズ 3：API完成 & 認証 & テスト
 - [x] 残API実装（タスクの更新・削除、タグのCRUD）
-- [ ] JWT認証の実装（ログイン・トークン検証・ミドルウェア）
-- [ ] ユニットテスト・統合テスト（`testing` パッケージ + `testcontainers`）
-- [ ] APIドキュメント整備（OpenAPI / Swagger）
+- [x] JWT認証の実装（ログイン・トークン検証・ミドルウェア）
+- [x] ユニットテスト・統合テスト（`testing` パッケージ + `httptest` / `go-sqlmock`、統合は `test-auth.ps1`）
+- [x] APIドキュメント整備（OpenAPI / Swagger）
 
 ### フェーズ 4：AWS配置 & インフラ構築
 - [ ] インフラ構成（ECS Fargate + RDS PostgreSQL + ALB）
@@ -57,4 +57,6 @@
 - [`docs/db/erd.md`](docs/db/erd.md): ER図
 - [`docs/PROMETHEUS_METRICS.md`](docs/PROMETHEUS_METRICS.md): Prometheusメトリクス定義書
 - [`docs/SLO.md`](docs/SLO.md): SLO / エラー予算 定義書
+- [`docs/openapi.yaml`](docs/openapi.yaml): OpenAPI 3.0 APIドキュメント（全11パス・JWT Bearer認証）
+- [`docs/TEST_EVIDENCE.md`](docs/TEST_EVIDENCE.md): テストエビデンス（実行ログ・カバレッジ）
 - [`docs/HANDOVER.md`](docs/HANDOVER.md): 引継ぎドキュメント（開発進捗・次のステップ）
