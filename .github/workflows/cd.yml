@@ -1,0 +1,88 @@
+name: CD
+
+# main への push でアプリを AWS にデプロイする。
+# 前提: `terraform apply` 済みでインフラ（ECR/ECS 等）が存在し、
+#        リポジトリ変数 AWS_ROLE_ARN に OIDC ロール ARN が設定されていること。
+# インフラ未構築の間は手動実行(workflow_dispatch)のみを想定。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/cd.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: kanban-dev-api
+  ECS_CLUSTER: kanban-dev-cluster
+  ECS_SERVICE: kanban-dev-api
+  ECS_TASK_FAMILY: kanban-dev-api
+  CONTAINER_NAME: api
+
+# OIDC で一時クレデンシャルを取得するために必須。
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & deploy to ECS
+    runs-on: ubuntu-latest
+    # ロール ARN 未設定なら安全に skip（インフラ未構築時の誤爆防止）。
+    if: ${{ vars.AWS_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$IMAGE"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --query taskDefinition > task-def.json
+
+      - name: Render new task definition with image
+        id: taskdef
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.taskdef.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

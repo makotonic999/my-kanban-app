@@ -1,0 +1,21 @@
+# Normalize line endings across platforms.
+# Go tooling (gofmt) expects LF; enforce it repo-wide to keep CI green on Linux.
+* text=auto eol=lf
+
+# Explicitly LF for source and config.
+*.go        text eol=lf
+*.mod       text eol=lf
+*.sum       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.tf        text eol=lf
+*.sql       text eol=lf
+*.md        text eol=lf
+*.sh        text eol=lf
+
+# Windows-specific scripts keep CRLF.
+*.ps1       text eol=crlf
+
+# Binary files (no normalization).
+*.png       binary
+*.jpg       binary

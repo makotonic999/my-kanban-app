@@ -96,9 +96,9 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	var input struct {
-		Title            string `json:"title"`
-		Description      *string `json:"description"`
-		EstimatedMinutes *int   `json:"estimated_minutes"`
+		Title            string     `json:"title"`
+		Description      *string    `json:"description"`
+		EstimatedMinutes *int       `json:"estimated_minutes"`
 		DueDate          *time.Time `json:"due_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -143,12 +143,12 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Title            *string `json:"title"`
-		Description      *string `json:"description"`
-		Status           *string `json:"status"`
+		Title            *string    `json:"title"`
+		Description      *string    `json:"description"`
+		Status           *string    `json:"status"`
 		DueDate          *time.Time `json:"due_date"`
-		EstimatedMinutes *int   `json:"estimated_minutes"`
-		ActualMinutes    *int   `json:"actual_minutes"`
+		EstimatedMinutes *int       `json:"estimated_minutes"`
+		ActualMinutes    *int       `json:"actual_minutes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		span.SetStatus(codes.Error, err.Error())

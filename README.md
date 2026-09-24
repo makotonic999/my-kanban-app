@@ -1,5 +1,7 @@
 # 個人用 AI 統合型カンバンボード (仮)
 
+[![CI](https://github.com/makotonic999/my-kanban-app/actions/workflows/ci.yml/badge.svg)](https://github.com/makotonic999/my-kanban-app/actions/workflows/ci.yml)
+
 「Go × PostgreSQL × SRE」の実務スキル向上および、最終的なモバイルアプリ（Google Play）リリースを目指す個人開発プロジェクト。
 日々のタスク管理に加え、1年分のログをAI（LLM）が分析してパーソナルな振り返りをフィードバックするWeb/モバイルアプリケーション。
 
@@ -29,7 +31,7 @@
 - [x] インフラ構成（ECS Fargate + RDS PostgreSQL + ALB）を Terraform で設計（`terraform/`、`plan` 通過）
 - [x] IaC（Terraform）によるインフラのコード化（NAT トグル・アカウントガード・SSMシークレット）
 - [ ] 本番適用（`terraform apply`）※フロントエンド完成後に実施予定
-- [ ] CI/CDパイプライン構築（GitHub Actions）
+- [x] CI/CDパイプライン構築（GitHub Actions）— CI稼働中 / CDはOIDCでコード化（apply後に有効化）
 - [ ] 本番環境へのSRE設定反映（Prometheus / Grafana / SLO）
 
 ### フェーズ 5：Webフロントエンド構築
@@ -98,3 +100,25 @@ docker compose up -d --build
 - **秘密情報は環境変数のみ**: `JWT_SECRET` はコード/gitに置かず環境変数管理（`.env` は gitignore）。
 
 実行ログ・カバレッジの詳細は [`docs/TEST_EVIDENCE.md`](docs/TEST_EVIDENCE.md) を参照。
+
+---
+
+## 🔄 CI/CD（GitHub Actions）
+
+長期の AWS アクセスキーを持たない **OIDC（シークレットレス）** 方式を採用。
+
+### CI（`.github/workflows/ci.yml`）— push / PR で自動実行
+- **Go**: gofmt チェック → `go vet` → `go build` → `go test -race -cover`
+- **Terraform**: `fmt -check` → `init -backend=false` → `validate`
+- AWS 不要・課金なしで毎回動作。
+
+### CD（`.github/workflows/cd.yml`）— `main` push で AWS へデプロイ
+1. GitHub OIDC で IAM ロールを一時 assume（アクセスキー不要）
+2. Docker イメージをビルドして **ECR** に push（`sha` と `latest`）
+3. タスク定義を再レンダリングして **ECS サービスを更新**（安定するまで待機）
+
+- OIDC 用 IAM ロールは Terraform（[`terraform/oidc_github.tf`](terraform/oidc_github.tf)）で管理。信頼ポリシーは当該リポジトリの `main`/タグに限定。
+- CD が実際に流れるのは **インフラ `apply` 済み** かつ リポジトリ変数 `AWS_ROLE_ARN` 設定後。未設定時は安全に skip。
+
+> セットアップ手順: `terraform apply` → `terraform output github_actions_role_arn` の値を
+> GitHub リポジトリの **Variables** に `AWS_ROLE_ARN` として登録すると CD が有効化される。
