@@ -32,6 +32,7 @@ data "aws_iam_policy_document" "ecs_secrets" {
     resources = [
       aws_ssm_parameter.database_url.arn,
       aws_ssm_parameter.jwt_secret.arn,
+      aws_ssm_parameter.adot_config.arn,
     ]
   }
   statement {
@@ -48,9 +49,30 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
   policy = data.aws_iam_policy_document.ecs_secrets.json
 }
 
-# ---- タスクロール: アプリ自身が使う AWS 権限（現状は最小=なし） ----
+# ---- タスクロール: アプリ自身が使う AWS 権限 ----
 resource "aws_iam_role" "ecs_task" {
   name               = "${local.name}-ecs-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
   tags               = { Name = "${local.name}-ecs-task" }
+}
+
+# ADOT sidecar が AMP へメトリクスを remote_write するための権限。
+data "aws_iam_policy_document" "ecs_task_amp" {
+  statement {
+    sid    = "AmpRemoteWrite"
+    effect = "Allow"
+    actions = [
+      "aps:RemoteWrite",
+      "aps:GetSeries",
+      "aps:GetLabels",
+      "aps:GetMetricMetadata",
+    ]
+    resources = [aws_prometheus_workspace.main.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_amp" {
+  name   = "${local.name}-ecs-task-amp"
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_amp.json
 }
