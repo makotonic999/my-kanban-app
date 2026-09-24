@@ -1,0 +1,135 @@
+# Amazon Managed Service for Prometheus 用ルール定義（単一ネームスペース）
+#
+# 注意: このファイルは terraform/amp.tf から AMP のルールグループネームスペースに登録される。
+# ローカル docker-compose 側の slo_rules.yml / alert_rules.yml と「同じ内容」を、
+# AMP が要求する「1つの groups: リスト」形式にまとめたもの。
+# 片方を更新したら、こちらも同期すること（将来は自動生成に置き換え可）。
+groups:
+  # ============================================================
+  # Recording rules（SLI 計算）
+  # ============================================================
+  - name: slo_recording_rules
+    interval: 30s
+    rules:
+      - record: job:http_requests:error_rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_requests_total[5m])) by (job)
+      - record: job:http_requests:error_rate1h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[1h])) by (job)
+          /
+          sum(rate(http_requests_total[1h])) by (job)
+      - record: job:http_requests:error_rate6h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[6h])) by (job)
+          /
+          sum(rate(http_requests_total[6h])) by (job)
+      - record: job:http_requests:error_rate24h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[24h])) by (job)
+          /
+          sum(rate(http_requests_total[24h])) by (job)
+      - record: job:slo_availability:ratio5m
+        expr: 1 - job:http_requests:error_rate5m
+      - record: job:slo_availability:ratio1h
+        expr: 1 - job:http_requests:error_rate1h
+      - record: job:slo_availability:ratio24h
+        expr: 1 - job:http_requests:error_rate24h
+      - record: job:http_request_duration_seconds:p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{path!="/metrics"}[5m])) by (job, le)
+          )
+      - record: job:http_request_duration_seconds:p99_5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket{path!="/metrics"}[5m])) by (job, le)
+          )
+      - record: job:slo_latency:ratio5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[5m])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[5m])) by (job)
+      - record: job:slo_latency:ratio1h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[1h])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[1h])) by (job)
+      - record: job:slo_latency:ratio24h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{path!="/metrics", le="0.5"}[24h])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{path!="/metrics"}[24h])) by (job)
+      - record: job:error_budget:burn_rate1h
+        expr: job:http_requests:error_rate1h / 0.001
+      - record: job:error_budget:burn_rate6h
+        expr: job:http_requests:error_rate6h / 0.001
+      - record: job:error_budget:burn_rate24h
+        expr: job:http_requests:error_rate24h / 0.001
+
+  # ============================================================
+  # Alerting rules（Multi-window, Multi-burn-rate / Google SRE Workbook）
+  # ============================================================
+  - name: slo_alerts
+    rules:
+      - alert: ErrorBudgetBurnCritical
+        expr: |
+          job:error_budget:burn_rate1h > 14
+          and
+          job:error_budget:burn_rate6h > 14
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "エラー予算が急激に消費されています ({{ $labels.job }})"
+          description: "消費速度が通常の14倍超。1時間以内に月間予算の2%を消費する見込み。"
+      - alert: ErrorBudgetBurnHigh
+        expr: |
+          job:error_budget:burn_rate1h > 6
+          and
+          job:error_budget:burn_rate6h > 6
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "エラー予算の消費速度が高い ({{ $labels.job }})"
+          description: "消費速度が通常の6倍超。6時間以内に月間予算の5%を消費する見込み。"
+      - alert: ErrorBudgetBurnLow
+        expr: |
+          job:error_budget:burn_rate6h > 3
+          and
+          job:error_budget:burn_rate24h > 3
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "エラー予算が緩やかに消費されています ({{ $labels.job }})"
+          description: "消費速度が通常の3倍超。"
+      - alert: LatencySLOViolation
+        expr: job:http_request_duration_seconds:p95_5m > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "レイテンシSLOが違反されています ({{ $labels.job }})"
+          description: "p95レイテンシが500msを超えています。"
+      - alert: LatencyP99High
+        expr: job:http_request_duration_seconds:p99_5m > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99レイテンシが1秒を超えています ({{ $labels.job }})"
+          description: "p99レイテンシが1秒を超えています。"
+      - alert: AvailabilitySLOViolation
+        expr: job:slo_availability:ratio5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "可用性SLOが違反されています ({{ $labels.job }})"
+          description: "直近5分の可用性が99.9%を下回っています。"

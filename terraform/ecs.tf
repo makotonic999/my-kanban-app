@@ -15,6 +15,12 @@ resource "aws_cloudwatch_log_group" "app" {
   tags              = { Name = "${local.name}-api-logs" }
 }
 
+resource "aws_cloudwatch_log_group" "adot" {
+  name              = "/ecs/${local.name}-adot"
+  retention_in_days = 14
+  tags              = { Name = "${local.name}-adot-logs" }
+}
+
 resource "aws_ecs_task_definition" "app" {
   family                   = "${local.name}-api"
   requires_compatibilities = ["FARGATE"]
@@ -69,6 +75,29 @@ resource "aws_ecs_task_definition" "app" {
           "awslogs-group"         = aws_cloudwatch_log_group.app.name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "api"
+        }
+      }
+    },
+    {
+      # ADOT Collector sidecar: /metrics をスクレイプし AMP へ remote_write する。
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+
+      # 設定は SSM から AOT_CONFIG_CONTENT で注入。
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.adot.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "adot"
         }
       }
     }

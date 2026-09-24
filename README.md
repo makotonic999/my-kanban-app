@@ -32,7 +32,7 @@
 - [x] IaC（Terraform）によるインフラのコード化（NAT トグル・アカウントガード・SSMシークレット）
 - [ ] 本番適用（`terraform apply`）※フロントエンド完成後に実施予定
 - [x] CI/CDパイプライン構築（GitHub Actions）— CI稼働中 / CDはOIDCでコード化（apply後に有効化）
-- [ ] 本番環境へのSRE設定反映（Prometheus / Grafana / SLO）
+- [x] 本番環境へのSRE設定反映（AMP + Amazon Managed Grafana + ADOT）を Terraform 化（`plan` 通過）
 
 ### フェーズ 5：Webフロントエンド構築
 - [ ] React（または Next.js）によるカンバンボードUI実装
