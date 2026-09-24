@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/makotonic999/my-kanban-app/internal/middleware"
 	"github.com/makotonic999/my-kanban-app/internal/model"
 )
 
@@ -19,9 +20,9 @@ func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("tag").Start(r.Context(), "List")
 	defer span.End()
 
-	userID := r.PathValue("user_id")
-	if userID == "" {
-		http.Error(w, "missing user_id parameter", http.StatusBadRequest)
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -58,8 +59,7 @@ func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	var input struct {
-		UserID int64  `json:"user_id"`
-		Name   string `json:"name"`
+		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -72,11 +72,17 @@ func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("tag").Start(ctx, "db.query: INSERT tags")
 	var t model.Tag
 	err := h.DB.QueryRowContext(ctx,
 		`INSERT INTO tags (user_id, name) VALUES ($1, $2) RETURNING id, user_id, name, created_at`,
-		input.UserID, input.Name,
+		userID, input.Name,
 	).Scan(&t.ID, &t.UserID, &t.Name, &t.CreatedAt)
 	dbSpan.End()
 	if err != nil {
@@ -100,8 +106,14 @@ func (h *TagHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("tag").Start(ctx, "db.query: DELETE tags")
-	result, err := h.DB.ExecContext(ctx, `DELETE FROM tags WHERE id = $1`, id)
+	result, err := h.DB.ExecContext(ctx, `DELETE FROM tags WHERE id = $1 AND user_id = $2`, id, userID)
 	dbSpan.End()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
