@@ -8,16 +8,18 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/makotonic999/my-kanban-app/internal/db"
 	"github.com/makotonic999/my-kanban-app/internal/handler"
 	"github.com/makotonic999/my-kanban-app/internal/middleware"
 	"github.com/makotonic999/my-kanban-app/internal/telemetry"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
+	// .env はローカル開発時のみ存在する。ECS などでは環境変数（SSM 由来）を直接使うため、
+	// ファイルが無くても致命的エラーにしない。
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("no .env file loaded; using process environment variables")
 	}
 
 	ctx := context.Background()

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -84,13 +85,20 @@ func TestValidateToken_Tampered(t *testing.T) {
 		t.Fatalf("GenerateToken error: %v", err)
 	}
 
-	// 末尾の1文字を書き換えて署名を壊す。
-	tampered := tok[:len(tok)-1]
-	if tok[len(tok)-1] == 'A' {
-		tampered += "B"
-	} else {
-		tampered += "A"
+	// ペイロード(2番目のセグメント)の1文字を書き換えて署名不一致を必ず起こす。
+	// 署名末尾の書き換えは base64url の末尾ビットの都合で同一デコードになる場合があり不安定なため避ける。
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("unexpected token format: %q", tok)
 	}
+	payload := []byte(parts[1])
+	// 先頭文字を別の文字に確実に変える。
+	if payload[0] == 'A' {
+		payload[0] = 'B'
+	} else {
+		payload[0] = 'A'
+	}
+	tampered := parts[0] + "." + string(payload) + "." + parts[2]
 
 	if _, err := ValidateToken(tampered); err != ErrInvalidToken {
 		t.Fatalf("expected ErrInvalidToken for tampered token, got %v", err)

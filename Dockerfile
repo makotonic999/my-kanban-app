@@ -25,7 +25,6 @@ WORKDIR /root/
 
 # ビルドステージからバイナリをコピー
 COPY --from=builder /app/app .
-COPY .env .
 
 EXPOSE 8080
 
