@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -94,5 +95,18 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestUserIDFrom(t *testing.T) {
+	// キーが存在する場合。
+	ctx := context.WithValue(context.Background(), UserIDKey, int64(77))
+	if id, ok := UserIDFrom(ctx); !ok || id != 77 {
+		t.Fatalf("UserIDFrom = (%d,%v), want (77,true)", id, ok)
+	}
+
+	// キーが無い場合。
+	if id, ok := UserIDFrom(context.Background()); ok || id != 0 {
+		t.Fatalf("UserIDFrom(empty) = (%d,%v), want (0,false)", id, ok)
 	}
 }

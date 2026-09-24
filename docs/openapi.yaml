@@ -4,9 +4,13 @@ info:
   description: |
     個人用 AI 統合型カンバンボードの Web API。
 
-    ## 認証
+    ## 認証・認可
     タスク系・タグ系エンドポイントは JWT (Bearer) 認証が必須です。
     `POST /login` でトークンを取得し、`Authorization: Bearer <token>` ヘッダで送信してください。
+
+    さらに**認可**として、各リソースは所有者本人のみ操作できます。
+    他ユーザーのタスク/タグにアクセスすると、存在を漏らさないため一律 **404 Not Found** を返します。
+    作成系(POST)の所有者はトークンから決まり、リクエストボディの user_id は無視されます。
 
     未保護エンドポイント: `POST /users`（登録）, `POST /login`, `GET /metrics`。
   version: "1.0.0"
@@ -235,17 +239,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /users/{user_id}/tags:
-    parameters:
-      - name: user_id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+  /tags:
     get:
       tags: [tags]
-      summary: ユーザーのタグ一覧取得
+      summary: タグ一覧取得（認証ユーザー自身のタグ）
+      description: 認証トークンの userID に紐づくタグのみを返す（name 昇順）。
       responses:
         '200':
           description: タグ配列（name 昇順）
@@ -255,14 +253,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Tag'
-        '400':
-          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-
-  /tags:
     post:
       tags: [tags]
       summary: タグ作成
@@ -462,11 +456,11 @@ components:
 
     CreateTaskRequest:
       type: object
-      required: [user_id, title]
+      required: [title]
+      description: |
+        所有者(user_id)は認証トークンから決定されるため、リクエストボディには含めない
+        （ボディに user_id を入れても無視される）。
       properties:
-        user_id:
-          type: integer
-          format: int64
         title:
           type: string
           example: Buy groceries
@@ -520,11 +514,9 @@ components:
 
     CreateTagRequest:
       type: object
-      required: [user_id, name]
+      required: [name]
+      description: 所有者(user_id)は認証トークンから決定される（ボディには含めない）。
       properties:
-        user_id:
-          type: integer
-          format: int64
         name:
           type: string
           example: work

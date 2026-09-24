@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/makotonic999/my-kanban-app/internal/middleware"
 	"github.com/makotonic999/my-kanban-app/internal/model"
 )
 
@@ -21,9 +22,15 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("task").Start(r.Context(), "List")
 	defer span.End()
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	// DBクエリのスパンを開始
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: SELECT tasks")
-	rows, err := h.DB.QueryContext(ctx, `SELECT id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at FROM tasks ORDER BY created_at DESC`)
+	rows, err := h.DB.QueryContext(ctx, `SELECT id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at FROM tasks WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	dbSpan.End()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -57,11 +64,17 @@ func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: SELECT task by id")
 	var t model.Task
 	err := h.DB.QueryRowContext(ctx,
-		`SELECT id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at FROM tasks WHERE id = $1`,
-		id,
+		`SELECT id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at FROM tasks WHERE id = $1 AND user_id = $2`,
+		id, userID,
 	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
 	dbSpan.End()
 	if err == sql.ErrNoRows {
@@ -83,7 +96,6 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	var input struct {
-		UserID           int64  `json:"user_id"`
 		Title            string `json:"title"`
 		Description      *string `json:"description"`
 		EstimatedMinutes *int   `json:"estimated_minutes"`
@@ -95,11 +107,18 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 所有者はリクエストボディではなくトークン由来の userID を使う（なりすまし防止）。
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: INSERT tasks")
 	var t model.Task
 	err := h.DB.QueryRowContext(ctx,
 		`INSERT INTO tasks (user_id, title, description, estimated_minutes, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
-		input.UserID, input.Title, input.Description, input.EstimatedMinutes, input.DueDate,
+		userID, input.Title, input.Description, input.EstimatedMinutes, input.DueDate,
 	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
 	dbSpan.End()
 	if err != nil {
@@ -134,6 +153,12 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -175,6 +200,9 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	query += ` WHERE id = $` + strconv.Itoa(argIndex)
 	args = append(args, id)
+	argIndex++
+	query += ` AND user_id = $` + strconv.Itoa(argIndex)
+	args = append(args, userID)
 	query += ` RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`
 
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: UPDATE tasks")
@@ -205,8 +233,14 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: DELETE tasks")
-	result, err := h.DB.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1`, id)
+	result, err := h.DB.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1 AND user_id = $2`, id, userID)
 	dbSpan.End()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -236,13 +270,23 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	now := time.Now()
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: UPDATE tasks")
 	var t model.Task
 	err := h.DB.QueryRowContext(ctx,
-		`UPDATE tasks SET status = 'done', completed_at = $1, updated_at = NOW() WHERE id = $2 RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
-		now, id,
+		`UPDATE tasks SET status = 'done', completed_at = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
+		now, id, userID,
 	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
 	dbSpan.End()
+	if err == sql.ErrNoRows {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -263,6 +307,12 @@ func (h *TaskHandler) AddTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var input struct {
 		TagID int64 `json:"tag_id"`
 	}
@@ -272,16 +322,46 @@ func (h *TaskHandler) AddTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// タスクとタグの双方が「このユーザーの所有物」である場合のみ関連付ける。
+	// SELECT ... WHERE 所有者一致 を満たさなければ 0 行 INSERT となる。
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: INSERT task_tags")
-	_, err := h.DB.ExecContext(ctx,
-		`INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-		taskID, input.TagID,
+	result, err := h.DB.ExecContext(ctx,
+		`INSERT INTO task_tags (task_id, tag_id)
+		 SELECT $1, $2
+		 WHERE EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND user_id = $3)
+		   AND EXISTS (SELECT 1 FROM tags  WHERE id = $2 AND user_id = $3)
+		 ON CONFLICT DO NOTHING`,
+		taskID, input.TagID, userID,
 	)
 	dbSpan.End()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// 0 行 = 所有権チェックに引っかかった（他人のタスク/タグ、または既に関連付け済み）。
+	// 既存関連（ON CONFLICT）と区別できないため、所有物確認を追加で行う。
+	if rowsAffected == 0 {
+		var exists bool
+		if err := h.DB.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND user_id = $2)
+			    AND EXISTS (SELECT 1 FROM tags  WHERE id = $3 AND user_id = $2)`,
+			taskID, userID, input.TagID,
+		).Scan(&exists); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !exists {
+			http.Error(w, "task or tag not found", http.StatusNotFound)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -298,10 +378,19 @@ func (h *TaskHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := middleware.UserIDFrom(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 自分が所有するタスクの関連付けだけを削除する。
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: DELETE task_tags")
 	result, err := h.DB.ExecContext(ctx,
-		`DELETE FROM task_tags WHERE task_id = $1 AND tag_id = $2`,
-		taskID, tagID,
+		`DELETE FROM task_tags
+		 WHERE task_id = $1 AND tag_id = $2
+		   AND EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND user_id = $3)`,
+		taskID, tagID, userID,
 	)
 	dbSpan.End()
 	if err != nil {

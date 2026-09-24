@@ -21,6 +21,7 @@
 ### フェーズ 3：API完成 & 認証 & テスト
 - [x] 残API実装（タスクの更新・削除、タグのCRUD）
 - [x] JWT認証の実装（ログイン・トークン検証・ミドルウェア）
+- [x] 認可の実装（各ユーザーは自分のタスク/タグのみ操作可能。他人のリソースは 404）
 - [x] ユニットテスト・統合テスト（`testing` パッケージ + `httptest` / `go-sqlmock`、統合は `test-auth.ps1`）
 - [x] APIドキュメント整備（OpenAPI / Swagger）
 
@@ -57,6 +58,42 @@
 - [`docs/db/erd.md`](docs/db/erd.md): ER図
 - [`docs/PROMETHEUS_METRICS.md`](docs/PROMETHEUS_METRICS.md): Prometheusメトリクス定義書
 - [`docs/SLO.md`](docs/SLO.md): SLO / エラー予算 定義書
-- [`docs/openapi.yaml`](docs/openapi.yaml): OpenAPI 3.0 APIドキュメント（全11パス・JWT Bearer認証）
+- [`docs/openapi.yaml`](docs/openapi.yaml): OpenAPI 3.0 APIドキュメント（全10パス・JWT Bearer認証）
 - [`docs/TEST_EVIDENCE.md`](docs/TEST_EVIDENCE.md): テストエビデンス（実行ログ・カバレッジ）
 - [`docs/HANDOVER.md`](docs/HANDOVER.md): 引継ぎドキュメント（開発進捗・次のステップ）
+
+---
+
+## ✅ テスト & 品質
+
+認証・認可という壊れると被害が大きい領域を、**テストピラミッド**で多層的に検証しています。
+
+### テスト構成
+| 種別 | 対象 | ツール | 件数 |
+|---|---|---|---|
+| ユニット | JWT発行・検証（改ざん / 失効 / alg混同攻撃 の拒否） | `testing` | 8 |
+| ユニット | ログイン（bcrypt照合・ユーザー列挙対策・入力検証） | `go-sqlmock` | 4 |
+| ユニット | 認証ミドルウェア + context伝播 | `httptest` | 5 |
+| ユニット | **認可**（自分のタスクのみ操作・他人は404・作成は本人ID） | `go-sqlmock` | 6 |
+| 統合(E2E) | Docker + PostgreSQL + API を通した実動作 & クロスユーザー分離 | `test-auth.ps1` | 12 |
+
+- **ユニット/HTTPテスト 23件・全PASS**、`internal/auth` パッケージのカバレッジ **92.3%**。
+- 統合テストは **User A のタスクに User B がアクセスできない（404）** ことまで実環境で確認済み。
+
+### 実行方法
+```bash
+# ユニットテスト（DB/Docker不要・高速）
+go test ./... -count=1 -v
+go test ./... -cover
+
+# 統合テスト（要 docker compose）
+docker compose up -d --build
+./test-auth.ps1        # 全12チェック、成功で EXITCODE=0
+```
+
+### セキュリティ設計のポイント
+- **認可の source of truth はトークン**: 作成時の所有者や一覧のフィルタは、リクエストボディではなく JWT 由来の userID で決定（なりすまし防止）。
+- **存在を漏らさない**: 他ユーザーのリソースは 403 ではなく **404** を返し、IDの存在有無を推測させない。
+- **秘密情報は環境変数のみ**: `JWT_SECRET` はコード/gitに置かず環境変数管理（`.env` は gitignore）。
+
+実行ログ・カバレッジの詳細は [`docs/TEST_EVIDENCE.md`](docs/TEST_EVIDENCE.md) を参照。
