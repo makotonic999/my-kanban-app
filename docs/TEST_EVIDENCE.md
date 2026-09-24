@@ -19,10 +19,10 @@
 | 統合テスト | `docker compose up -d --build` → `./test-auth.ps1` | ✅ 全6チェックPASS（EXITCODE=0, 2026-09-24） |
 | OpenAPI検証 | 一時Goバリデータ（`gopkg.in/yaml.v3`） | ✅ `YAML_OK openapi=3.0.3 paths=11 schemas=9` |
 
-- テスト総数: **16件（すべてPASS）**
+- テスト総数: **23件（すべてPASS）**
   - `internal/auth`: 8件
-  - `internal/handler`（Login）: 4件
-  - `internal/middleware`（RequireAuth）: 4件
+  - `internal/handler`（Login 4 + 認可 6）: 10件
+  - `internal/middleware`（RequireAuth 4 + UserIDFrom 1）: 5件
 
 ### カバレッジ（`go test ./... -count=1 -cover`）
 
@@ -205,3 +205,45 @@ go vet ./...
 go test ./... -count=1 -v
 go test ./... -count=1 -cover
 ```
+
+
+---
+
+## 7. 認可（Authorization）テスト（2026-09-24 追加）
+
+「認証済みでも他人のリソースは触れない」ことを、ユニットと統合の両方で証明した。
+
+### ユニット（`internal/handler/task_test.go`, `go-sqlmock`）
+| テスト | 保証内容 |
+|---|---|
+| `TestTaskList_ScopedToOwner` | 一覧SQLに `WHERE user_id = $1` が付き、トークンの userID が渡る |
+| `TestTaskList_Unauthenticated` | context に userID が無ければ 401 |
+| `TestTaskCreate_UsesTokenUserID` | ボディに `user_id:999` を混入しても、INSERT はトークンの userID を使う |
+| `TestTaskDelete_OwnTask` | 自分のタスク削除は 204 |
+| `TestTaskDelete_OtherUsersTask_NotFound` | 他人のタスクは `AND user_id` で 0 行 → 404 |
+| `TestTaskGetByID_OtherUsersTask_NotFound` | 他人のタスク取得は 0 行(ErrNoRows) → 404 |
+
+`internal/middleware/auth_test.go` に `TestUserIDFrom`（context ヘルパ）を追加。
+
+### カバレッジ（更新後）
+```
+ok  internal/auth        coverage: 92.3% of statements
+ok  internal/handler     coverage: 25.2% of statements   (認可テスト追加で 7.5% → 25.2%)
+ok  internal/middleware  coverage: 17.9% of statements
+```
+
+### 統合テスト（`test-auth.ps1`、全12チェック・EXITCODE=0）
+
+認証6チェックに加え、**クロスユーザー分離**を実環境で確認:
+```
+7.  User A creates a task ....................... Task ID (owned by A)
+8.  Create User B and log in .................... token received
+9.  User B GET A's task ......................... OK: 404 (B cannot read A's task)
+10. User B DELETE A's task ...................... OK: 404 (B cannot delete A's task)
+11. User B list does not contain A's task ...... OK: A's task not visible to B (B has 0)
+12. User A reads then deletes own task ......... OK: 200 then 204
+=== All auth checks passed ===  EXITCODE=0
+```
+
+> これにより「複数ユーザーが同一APIを使っても、各自のデータは相互に隔離される」ことが、
+> 単体（SQLの絞り込み）と実環境（本物のDB越しの分離）の両面から証明された。

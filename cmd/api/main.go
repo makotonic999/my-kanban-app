@@ -59,7 +59,7 @@ func main() {
 	mux.Handle("PATCH /tasks/{id}/complete", protect(taskHandler.Complete))
 	mux.Handle("POST /tasks/{id}/tags", protect(taskHandler.AddTag))
 	mux.Handle("DELETE /tasks/{id}/tags/{tag_id}", protect(taskHandler.RemoveTag))
-	mux.Handle("GET /users/{user_id}/tags", protect(tagHandler.List))
+	mux.Handle("GET /tags", protect(tagHandler.List))
 	mux.Handle("POST /tags", protect(tagHandler.Create))
 	mux.Handle("DELETE /tags/{id}", protect(tagHandler.Delete))
 
