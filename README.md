@@ -26,8 +26,9 @@
 - [x] APIドキュメント整備（OpenAPI / Swagger）
 
 ### フェーズ 4：AWS配置 & インフラ構築
-- [ ] インフラ構成（ECS Fargate + RDS PostgreSQL + ALB）
-- [ ] IaC（Terraform または AWS CDK）によるインフラのコード化
+- [x] インフラ構成（ECS Fargate + RDS PostgreSQL + ALB）を Terraform で設計（`terraform/`、`plan` 通過）
+- [x] IaC（Terraform）によるインフラのコード化（NAT トグル・アカウントガード・SSMシークレット）
+- [ ] 本番適用（`terraform apply`）※フロントエンド完成後に実施予定
 - [ ] CI/CDパイプライン構築（GitHub Actions）
 - [ ] 本番環境へのSRE設定反映（Prometheus / Grafana / SLO）
 
