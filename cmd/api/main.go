@@ -8,11 +8,11 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/makotonic999/my-kanban-app/internal/db"
 	"github.com/makotonic999/my-kanban-app/internal/handler"
 	"github.com/makotonic999/my-kanban-app/internal/middleware"
 	"github.com/makotonic999/my-kanban-app/internal/telemetry"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
