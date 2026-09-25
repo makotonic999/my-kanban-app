@@ -61,7 +61,23 @@
 - `frontend_hosting.tf` は追加のみで `plan` 未検証、compose へのフロントサービス定義も未追加（今後）。
 
 ## 次のステップ
-- [ ] `terraform/frontend_hosting.tf` の `plan` 検証、S3 + CloudFront への実配信
 - [ ] `docker compose` にフロントサービスを追加（or ビルド成果物を配信）
 - [ ] フロントの E2E/コンポーネントテスト、lint(eslint) 導入の検討
 - [ ] フロント完成後にインフラ一式を `apply` → CD 実走
+
+## 追記: フロント配信インフラ `plan` 通過（同日）
+`terraform/frontend_hosting.tf`（S3 非公開 + CloudFront + OAC + SPA ルーティング Function）の
+`plan` を検証。フェーズ4 までと同じ「`plan` 通過まで（`apply` は課金のため後回し）」の到達点に揃えた。
+
+### 検証エビデンス
+- `terraform fmt -check -recursive` = 0、`terraform validate` = Success。
+- `terraform plan` = **Plan: 56 to add, 0 to change, 0 to destroy**（従来 48 + フロント配信 8）。
+  警告は CloudFront Function 等の想定内のみ、エラーなし。
+- アカウントガード = 適用先 `532970129307`（dev）で想定一致。
+- フロント配信 8 リソースが計画に含まれることを確認:
+  `aws_s3_bucket.frontend` / `_public_access_block` / `_versioning` /
+  `aws_cloudfront_origin_access_control.frontend` / `aws_cloudfront_function.spa_router` /
+  `aws_cloudfront_distribution.frontend` / `aws_s3_bucket_policy.frontend` / `random_id.frontend_suffix`。
+- output に `frontend_bucket` / `frontend_cloudfront_domain` / `frontend_distribution_id` を追加
+  （デプロイ時の同期先・キャッシュ無効化に使用）。
+- **`apply` 未実施**（課金なし）。plan 成果物はコミットせず削除。
