@@ -1,0 +1,10 @@
+# このファイルをコピーして terraform.tfvars を作成する（terraform.tfvars は gitignore 済み）。
+# 実際の値はコミットしないこと。環境変数 TF_VAR_allowed_account_id でも注入できる。
+
+# アカウントガード: 適用を許可する AWS アカウントID（12桁）。
+# 空のままだとガードは無効。誤アカウントへの適用を防ぎたい場合に自分の dev アカウントIDを設定する。
+allowed_account_id = "123456789012"
+
+# 必要に応じて上書き:
+# aws_profile = "dev"
+# region      = "ap-northeast-1"

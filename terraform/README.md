@@ -1,7 +1,7 @@
 # Terraform — AWS インフラ（フェーズ4）
 
 my-kanban-app を AWS 上で動かすためのインフラを Terraform でコード化したもの。
-対象アカウントは **dev (`532970129307`)**、リージョンは **ap-northeast-1（東京）**。
+対象アカウントは **dev (`123456789012`)**、リージョンは **ap-northeast-1（東京）**。
 
 > ⚠️ 現状は `terraform plan` が通る状態まで。実 `apply`（課金発生）はフロントエンド完成後に行う想定。
 
@@ -57,7 +57,7 @@ my-kanban-app を AWS 上で動かすためのインフラを Terraform でコ�
 - AWS SSO で dev プロファイルにログイン済みであること:
   ```powershell
   aws sso login --profile dev
-  aws sts get-caller-identity --profile dev   # Account が 532970129307 であること
+  aws sts get-caller-identity --profile dev   # Account が 123456789012 であること
   ```
 
 ## 使い方

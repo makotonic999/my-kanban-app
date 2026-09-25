@@ -6,9 +6,9 @@
 
 ## 前提の確認（着手前にやったこと）
 - IaC は **Terraform** に統一（DIVE プロジェクトと揃える）。
-- デプロイ先は **dev アカウント `532970129307`** / **ap-northeast-1**。
+- デプロイ先は **dev アカウント `123456789012`** / **ap-northeast-1**。
   - 最初 `sts get-caller-identity` が `761018859875`（root）を指していて中断 → 正しい dev プロファイルを特定。
-  - `~/.aws/config` を確認し、プロファイル `dev`（SSO, AdministratorAccess, 532970129307）を使用と決定。
+  - `~/.aws/config` を確認し、プロファイル `dev`（SSO, AdministratorAccess, 123456789012）を使用と決定。
   - SSO トークン期限切れ → `aws sso login --profile dev` 後に再確認、`assumed-role/.../dev` で dev を指すことを検証。
 - コスト方針: 固定費（ALB/RDS/NAT）が「立てている時間」に課金される点を確認。
   **NAT はデフォルト無効**（月~$35 回避）、`apply`/`destroy` で立て消しする運用を前提に。
@@ -32,7 +32,7 @@
 - `terraform init` → aws 5.100.0 / random 3.9.1 取得成功。
 - `terraform validate` → **Success! The configuration is valid.**
 - `terraform plan` → **Plan: 36 to add, 0 to change, 0 to destroy**。警告・エラーなし。
-  - アカウントガードは沈黙（= dev 532970129307 に正しく向いている）。
+  - アカウントガードは沈黙（= dev 123456789012 に正しく向いている）。
   - `nat_gateway_enabled = false`。
 - **`apply` は未実施**（課金なし）。
 

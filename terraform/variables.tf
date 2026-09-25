@@ -5,9 +5,13 @@ variable "aws_profile" {
 }
 
 variable "allowed_account_id" {
-  description = "適用を許可する AWS アカウントID（アカウントガード）"
+  description = <<-EOT
+    適用を許可する AWS アカウントID（アカウントガード）。
+    実 ID はコミットせず、`terraform.tfvars`（gitignore 済み）や環境変数
+    `TF_VAR_allowed_account_id` で注入する。空の場合はガードを実質無効化する。
+  EOT
   type        = string
-  default     = "532970129307" # dev
+  default     = ""
 }
 
 variable "region" {

@@ -73,7 +73,7 @@
 - `terraform fmt -check -recursive` = 0、`terraform validate` = Success。
 - `terraform plan` = **Plan: 56 to add, 0 to change, 0 to destroy**（従来 48 + フロント配信 8）。
   警告は CloudFront Function 等の想定内のみ、エラーなし。
-- アカウントガード = 適用先 `532970129307`（dev）で想定一致。
+- アカウントガード = 適用先 `123456789012`（dev）で想定一致。
 - フロント配信 8 リソースが計画に含まれることを確認:
   `aws_s3_bucket.frontend` / `_public_access_block` / `_versioning` /
   `aws_cloudfront_origin_access_control.frontend` / `aws_cloudfront_function.spa_router` /
