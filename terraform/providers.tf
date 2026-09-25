@@ -38,7 +38,9 @@ data "aws_caller_identity" "current" {}
 # （SSO でプロファイルを間違える事故を防ぐ）
 check "account_guard" {
   assert {
-    condition     = data.aws_caller_identity.current.account_id == var.allowed_account_id
+    # allowed_account_id が空（未注入）ならガードをスキップ。
+    # 注入されている場合のみ、呼び出し元アカウントとの一致を要求する。
+    condition     = var.allowed_account_id == "" || data.aws_caller_identity.current.account_id == var.allowed_account_id
     error_message = "適用先アカウント(${data.aws_caller_identity.current.account_id})が想定(${var.allowed_account_id})と異なります。プロファイルを確認してください。"
   }
 }
