@@ -123,3 +123,29 @@ docker compose up -d --build
 
 > セットアップ手順: `terraform apply` → `terraform output github_actions_role_arn` の値を
 > GitHub リポジトリの **Variables** に `AWS_ROLE_ARN` として登録すると CD が有効化される。
+
+### フロントエンドのデプロイ（S3 + CloudFront）
+
+フロント(`frontend/`)は S3 + CloudFront で配信する。デプロイ経路は 2 通り。
+
+**手動デプロイ（スクリプト）**
+```powershell
+aws sso login --profile dev          # 認証
+./scripts/deploy-frontend.ps1        # output取得 → build → S3同期 → CloudFront無効化
+```
+宛先（バケット名・ディストリビューションID）は `terraform output` から動的取得するため、ハードコード不要。
+
+**自動デプロイ（CD）**
+`main` への push で `frontend/**` が変更されると `deploy-frontend` ジョブが実行される
+（`.github/workflows/cd.yml`）。ビルド → S3 同期 → CloudFront 無効化。
+以下のリポジトリ **Variables** で制御（未設定時は安全に skip）:
+
+| 変数 | 用途 |
+|---|---|
+| `AWS_ROLE_ARN` | OIDC で assume する IAM ロール（CD 共通） |
+| `FRONTEND_BUCKET` | 配信元 S3 バケット名（`terraform output frontend_bucket`） |
+| `FRONTEND_DISTRIBUTION_ID` | CloudFront ID（`terraform output frontend_distribution_id`） |
+| `VITE_API_BASE_URL` | 本番 API のオリジン（未設定なら dev プロキシ用の `/api`） |
+
+> ローカル開発では上記デプロイは不要。`docker compose up`（API+DB）+ `npm run dev`（フロント :5173）で
+> Vite プロキシ経由 API を叩ける。ローカル利用は課金なし。
