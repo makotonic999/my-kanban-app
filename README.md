@@ -38,7 +38,8 @@
 - [x] React + Vite + TypeScript + Tailwind CSS によるカンバンボードUI実装（3カラム / タスクCRUD）
 - [x] JWT認証フロー（ログイン・新規登録・トークン管理・401で自動ログアウト）
 - [x] CORS ミドルウェア（Go）追加 — フロント（別オリジン）からの API アクセスに対応
-- [ ] AWS S3 + CloudFront によるホスティング（`terraform/frontend_hosting.tf` 用意済み・`plan` 未検証）
+- [x] AWS S3 + CloudFront によるホスティングを Terraform 化（`terraform/frontend_hosting.tf`、`plan` 通過 = 56 to add）
+- [ ] 本番適用（`terraform apply`）でフロントを実配信 ※インフラ一式の apply とあわせて実施予定
 
 ### フェーズ 6：AI機能の実装 & データ基盤整備
 - [ ] AI（LLM）が集計しやすいDB構造・クエリへのリファクタリング
