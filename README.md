@@ -35,9 +35,10 @@
 - [x] 本番環境へのSRE設定反映（AMP + Amazon Managed Grafana + ADOT）を Terraform 化（`plan` 通過）
 
 ### フェーズ 5：Webフロントエンド構築
-- [ ] React（または Next.js）によるカンバンボードUI実装
-- [ ] JWT認証フロー（ログイン・セッション管理）
-- [ ] AWS S3 + CloudFront によるホスティング
+- [x] React + Vite + TypeScript + Tailwind CSS によるカンバンボードUI実装（3カラム / タスクCRUD）
+- [x] JWT認証フロー（ログイン・新規登録・トークン管理・401で自動ログアウト）
+- [x] CORS ミドルウェア（Go）追加 — フロント（別オリジン）からの API アクセスに対応
+- [ ] AWS S3 + CloudFront によるホスティング（`terraform/frontend_hosting.tf` 用意済み・`plan` 未検証）
 
 ### フェーズ 6：AI機能の実装 & データ基盤整備
 - [ ] AI（LLM）が集計しやすいDB構造・クエリへのリファクタリング
