@@ -68,6 +68,9 @@ func main() {
 	// メトリクスミドルウェアを適用
 	handlerWithMetrics := middleware.MetricsMiddleware(mux)
 
+	// CORS を最外層に適用し、プリフライト(OPTIONS)を認証より前に処理する。
+	handler := middleware.CORS(handlerWithMetrics)
+
 	fmt.Println("Server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handlerWithMetrics))
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
