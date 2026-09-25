@@ -3,3 +3,8 @@ dist
 dist-ssr
 *.local
 .vite
+
+# 環境変数の実値は除外（example はコミットする）。
+.env
+.env.*
+!.env.example
