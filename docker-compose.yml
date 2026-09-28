@@ -1,6 +1,19 @@
+# =============================================================================
+# コア構成（環境1: ローカル）— 日々使う最小セット
+#   db + api + frontend の 3 サービス。
+#   監視系（jaeger / prometheus / grafana）は docker-compose.observability.yml に分離。
+#
+# 使い方:
+#   日常     : docker compose up -d
+#   監視付き : docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#
+# restart: unless-stopped により、Docker Desktop 起動時にコンテナが自動復帰する
+# （明示的に stop したものは復帰しない）。→ ローカルのフル自動化。
+# =============================================================================
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: kanban
       POSTGRES_PASSWORD: kanban
@@ -8,6 +21,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
+      # 名前付きボリュームにデータを永続化。down / PC 再起動でもタスクは消えない。
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kanban"]
@@ -15,55 +29,43 @@ services:
       timeout: 5s
       retries: 5
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.57
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "4318:4318"    # OTLP HTTP receiver
-
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./slo_rules.yml:/etc/prometheus/slo_rules.yml
-      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
-    depends_on:
-      - api
-
-  grafana:
-    image: grafana/grafana:10.4.0
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana-dashboard.json:/etc/grafana/dashboards/kanban.json
-    depends_on:
-      - prometheus
-
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       DATABASE_URL: host=db port=5432 user=kanban password=kanban dbname=kanban_dev sslmode=disable
-      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
       # ローカル開発用の JWT 署名鍵（本番は SSM から注入）。値は開発専用でよい。
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me}
       # フロント(Vite dev server)からの直接アクセスを許可。
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      # OTLP 送信先。コア単体では jaeger が居ないため未設定（空）で起動。
+      # 監視を足す時は observability.yml が jaeger:4318 を上書き注入する。
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       db:
         condition: service_healthy
-      jaeger:
-        condition: service_started
     volumes:
       - ./db/init.sql:/app/db/init.sql
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      # コンテナ内から API へは compose のサービス名 "api" で到達する。
+      VITE_DEV_PROXY_TARGET: http://api:8080
+    volumes:
+      # ソースを bind mount してホットリロードを効かせる。
+      - ./frontend:/app
+      # node_modules はコンテナ内のものを使う（ホストの環境で上書きしない）。
+      - /app/node_modules
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
-  grafana_data:
