@@ -1,0 +1,62 @@
+# =============================================================================
+# 監視オーバーレイ — jaeger / prometheus / grafana
+#
+# ⚠ 単独では使わない。必ずコア(docker-compose.yml)に重ねて起動すること。
+#    理由: prometheus は "api:8080" をスクレイプするため、api と同じ
+#          プロジェクト/ネットワークに居る必要がある。単独起動すると
+#          別ネットワークになり api を名前解決できない。
+#
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#
+# UI:
+#   Jaeger     http://localhost:16686
+#   Prometheus http://localhost:9090
+#   Grafana    http://localhost:3000  (admin / admin)
+# =============================================================================
+services:
+  # コアの api にトレース送信先を注入（オーバーレイでの上書き）。
+  api:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP receiver
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./slo_rules.yml:/etc/prometheus/slo_rules.yml
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana-dashboard.json:/etc/grafana/dashboards/kanban.json
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana_data:
