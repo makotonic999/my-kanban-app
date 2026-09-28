@@ -1,0 +1,20 @@
+# フロントエンド開発用 Dockerfile（Vite dev server + ホットリロード）
+# 本番の静的配信用ではない。ローカルのフル自動化（docker compose）で使う。
+# ソースは compose 側でボリュームマウントするため、ここでは依存の確定と起動に専念する。
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 依存だけ先にインストールしてレイヤキャッシュを効かせる。
+# （package.json / package-lock.json が変わらない限り再インストールしない）
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# 残りのソースをコピー。
+# compose の bind mount で上書きされるが、マウント無しでも起動できるようにしておく。
+COPY . .
+
+EXPOSE 5173
+
+# --host 0.0.0.0 でコンテナ外（ホストのブラウザ）から到達可能にする。
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
