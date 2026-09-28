@@ -148,5 +148,86 @@ aws sso login --profile dev          # 認証
 | `FRONTEND_DISTRIBUTION_ID` | CloudFront ID（`terraform output frontend_distribution_id`） |
 | `VITE_API_BASE_URL` | 本番 API のオリジン（未設定なら dev プロキシ用の `/api`） |
 
-> ローカル開発では上記デプロイは不要。`docker compose up`（API+DB）+ `npm run dev`（フロント :5173）で
-> Vite プロキシ経由 API を叩ける。ローカル利用は課金なし。
+> ローカル開発では上記デプロイは不要。`docker compose up -d` だけで **DB + API + フロント** が
+> まとめて起動する（フロントもコンテナ化済み）。詳細は下記「🖥 ローカル環境（環境1）」を参照。ローカル利用は課金なし。
+
+---
+
+## 🖥 ローカル環境（環境1）— フル自動化
+
+日々のタスク管理は、このローカル環境だけで完結する（AWS 不要・課金ゼロ）。
+`db` / `api` / `frontend` の 3 サービスがコンテナ化されており、`docker compose up` でまとめて起動する。
+
+### 起動 / 停止
+
+```powershell
+cd C:\Users\HP\my-kanban-app
+
+# 起動（DB + API + フロント）。初回や依存更新時は --build を付ける。
+docker compose up -d --build
+
+# 使う: ブラウザで http://localhost:5173
+
+# 状態確認 / ログ
+docker compose ps
+docker compose logs -f api
+
+# 停止（コンテナ停止。データはボリュームに残る）
+docker compose down
+```
+
+### 監視も見たいとき（jaeger / prometheus / grafana）
+
+監視スタックは [`docker-compose.observability.yml`](docker-compose.observability.yml) に分離してある。
+コアに **重ねて** 起動する（単独起動は不可 — 理由は同ファイル冒頭のコメント参照）。
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+```
+
+| UI | URL | 備考 |
+|---|---|---|
+| アプリ（カンバン） | http://localhost:5173 | フロント（Vite dev server） |
+| API | http://localhost:8080 | Go バックエンド |
+| Jaeger | http://localhost:16686 | トレース |
+| Prometheus | http://localhost:9090 | メトリクス |
+| Grafana | http://localhost:3000 | ダッシュボード（admin / admin） |
+
+### 自動復帰の仕組み
+
+- 全サービスに `restart: unless-stopped` を付与。**Docker Desktop 起動時にコンテナが自動で復帰**する
+  （明示的に `docker compose down` / `stop` したものは復帰しない）。
+- Docker Desktop 自体の自動起動は OS 側の設定で有効化する
+  （Docker Desktop → Settings → General → *Start Docker Desktop when you sign in*）。
+- **PC を起動しっぱなしにする必要はない**。PostgreSQL のデータは名前付きボリューム `postgres_data` に
+  永続化されるため、停止・シャットダウンしてもタスクは消えず、次回そのまま続きから使える。
+
+### なぜ compose を 2 ファイルに分けたか
+
+- **コア（`docker-compose.yml`）** = 日々使う最小セット（db + api + frontend）。軽量・起動が速い。
+- **監視（`docker-compose.observability.yml`）** = 見たい時だけ `-f` で足す追加レイヤー。
+- 引数なしの `docker compose up` はコアだけを読むため、日常の既定挙動は「アプリ本体だけ起動」になる。
+- 監視オーバーレイは prometheus が `api:8080` をスクレイプする都合上、**必ずコアと同一プロジェクト
+  （同一ネットワーク）で起動**する必要がある。だから単独起動せず `-f` で重ねる運用に統一している。
+
+---
+
+## 🌐 3 環境の分離（設計）
+
+このプロジェクトは用途の異なる 3 つの環境を持つ。**環境はブランチで分けない。コードは 1 つ、設定で分ける**
+のが基本方針（ブランチ分離はコードが乖離するアンチパターンのため採らない）。
+
+| 環境 | 目的 | フロント | バックエンド | DB | 分け方 |
+|---|---|---|---|---|---|
+| **1. ローカル** | 日々使う・データ蓄積 | compose 内 Vite dev server | compose の Go API | compose の Postgres（永続ボリューム） | `docker-compose.yml`（設定） |
+| **2. AWS 版** | Web 公開 | S3 + CloudFront | ECS Fargate | RDS | `terraform/`（設定） |
+| **3. モバイル版** | 将来 Google Play | Flutter / React Native 別アプリ | **AWS 版 API を共用** | AWS 版 RDS 共用 | **別リポジトリ**（フェーズ7で新設） |
+
+### 設計判断
+
+- **ローカルと AWS は同じソース**。違いは設定（`docker-compose` vs `terraform`）と環境変数
+  （`VITE_API_BASE_URL` / `DATABASE_URL` / `CORS_ALLOWED_ORIGINS`）だけ。すでにこの構造になっている。
+- **開発は Vite プロキシ、本番は CORS** の二本立て。ローカルはブラウザから見て同一オリジン化（`/api` プロキシ）
+  され CORS 不要。本番はフロントと API のオリジンが異なるためサーバ側 CORS が必須。
+- **モバイルだけは別リポジトリ**。言語・ツールチェーン・リリースサイクルが Web と異なるため、フェーズ7で新設する。
+  バックエンド（AWS 版 API / RDS）は Web と共用する。
