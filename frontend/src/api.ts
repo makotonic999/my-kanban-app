@@ -96,6 +96,17 @@ export function updateTaskStatus(id: number, status: TaskStatus): Promise<Task> 
   });
 }
 
+// タイトル・期日などの部分更新。送るフィールドだけ変更される（PATCH セマンティクス）。
+export function updateTask(
+  id: number,
+  patch: { title?: string; due_date?: string | null },
+): Promise<Task> {
+  return request<Task>(`/tasks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 export function completeTask(id: number): Promise<Task> {
   return request<Task>(`/tasks/${id}/complete`, { method: "PATCH" });
 }
