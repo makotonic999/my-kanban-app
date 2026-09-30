@@ -5,6 +5,7 @@ import {
   createTask,
   deleteTask,
   listTasks,
+  updateTask,
   updateTaskStatus,
 } from "../api";
 import type { Task, TaskStatus } from "../types";
@@ -51,6 +52,11 @@ export function Board({ onUnauthorized }: Props) {
   const [cursor, setCursor] = useState<{ col: number; row: number } | null>(
     null,
   );
+
+  // インライン編集の状態。editingId が非 null のカードが編集モード。
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDue, setEditDue] = useState(""); // YYYYMMDD 形式
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const dueInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +154,63 @@ export function Board({ onUnauthorized }: Props) {
     }
   }
 
+  // 選択中カードのインライン編集を開始する（F2）。
+  function startEdit(task: Task) {
+    setEditingId(task.id);
+    setEditTitle(task.title);
+    setEditDue(task.due_date ? yyyymmddToInputValue(task.due_date).replace(/-/g, "") : "");
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditTitle("");
+    setEditDue("");
+  }
+
+  // 編集内容を保存する。変更があったフィールドだけ送る。
+  async function saveEdit(task: Task) {
+    const newTitle = editTitle.trim();
+    if (!newTitle) {
+      setError("タイトルは空にできません。");
+      return;
+    }
+
+    // 期日: 空欄は「期日なし」。入力ありは YYYYMMDD を検証。
+    let newDueIso: string | null = null;
+    if (editDue.trim()) {
+      const parsed = parseYyyymmdd(editDue);
+      if (!parsed) {
+        setError(
+          "期日は YYYYMMDD 形式で入力してください（例: 20260930）。存在しない日付は登録できません。",
+        );
+        return;
+      }
+      newDueIso = parsed.toISOString();
+    }
+
+    const patch: { title?: string; due_date?: string | null } = {};
+    if (newTitle !== task.title) patch.title = newTitle;
+    const oldDueYmd = task.due_date
+      ? yyyymmddToInputValue(task.due_date).replace(/-/g, "")
+      : "";
+    if (editDue.trim() !== oldDueYmd) patch.due_date = newDueIso;
+
+    // 変更がなければ API を叩かずに閉じる。
+    if (patch.title === undefined && patch.due_date === undefined) {
+      cancelEdit();
+      return;
+    }
+
+    try {
+      await updateTask(task.id, patch);
+      cancelEdit();
+      await refresh();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
   // 現在カーソルが指しているタスクを取り出す。
   function taskAtCursor(): Task | null {
     if (!cursor) return null;
@@ -173,6 +236,20 @@ export function Board({ onUnauthorized }: Props) {
         setHelpOpen((v) => !v);
         return;
       }
+
+      // F2: 選択中カードのインライン編集を開始（編集中・入力中でなければ）。
+      if (e.key === "F2" && !typing && editingId === null) {
+        const task = taskAtCursor();
+        if (task) {
+          e.preventDefault();
+          startEdit(task);
+        }
+        return;
+      }
+
+      // 編集中はカード内の入力欄が処理するので、グローバルの操作は行わない
+      // （Enter/Esc/矢印/Tab はカード側の onKeyDown が担当）。
+      if (editingId !== null) return;
 
       if (e.key === "Escape") {
         if (helpOpen) {
@@ -288,9 +365,9 @@ export function Board({ onUnauthorized }: Props) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // tasks/cursor/helpOpen に依存（最新の列構成で判定するため）
+    // tasks/cursor/helpOpen/editingId に依存（最新の状態で判定するため）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, cursor, helpOpen]);
+  }, [tasks, cursor, helpOpen, editingId]);
 
   // タスク更新でカーソルが範囲外になったら補正する。
   useEffect(() => {
@@ -411,11 +488,19 @@ export function Board({ onUnauthorized }: Props) {
                       selected={
                         cursor?.col === colIndex && cursor?.row === rowIndex
                       }
+                      editing={editingId === task.id}
+                      editTitle={editTitle}
+                      editDue={editDue}
+                      onEditTitleChange={setEditTitle}
+                      onEditDueChange={setEditDue}
+                      onSave={() => saveEdit(task)}
+                      onCancel={cancelEdit}
                       onMove={moveTo}
                       onDelete={remove}
                       onSelect={() =>
                         setCursor({ col: colIndex, row: rowIndex })
                       }
+                      onStartEdit={() => startEdit(task)}
                     />
                   ))}
                 </div>
@@ -433,22 +518,138 @@ export function Board({ onUnauthorized }: Props) {
 function TaskCard({
   task,
   selected,
+  editing,
+  editTitle,
+  editDue,
+  onEditTitleChange,
+  onEditDueChange,
+  onSave,
+  onCancel,
   onMove,
   onDelete,
   onSelect,
+  onStartEdit,
 }: {
   task: Task;
   selected: boolean;
+  editing: boolean;
+  editTitle: string;
+  editDue: string;
+  onEditTitleChange: (v: string) => void;
+  onEditDueChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
   onMove: (task: Task, status: TaskStatus) => void;
   onDelete: (task: Task) => void;
   onSelect: () => void;
+  onStartEdit: () => void;
 }) {
   const dueLabel = formatDueDate(task.due_date);
   const overdue = task.status !== "done" && isOverdue(task.due_date);
 
+  const editTitleRef = useRef<HTMLInputElement>(null);
+  const editDueRef = useRef<HTMLInputElement>(null);
+
+  // 編集モードに入ったらタイトル入力へフォーカス＆全選択（エクセル的な F2）。
+  useEffect(() => {
+    if (editing) {
+      const el = editTitleRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+  }, [editing]);
+
+  // --- 編集モードの表示 ---
+  if (editing) {
+    return (
+      <div className="rounded-lg border neon-ring border-accent/70 bg-base-700 p-2.5 text-sm space-y-2">
+        {/* タイトル編集 */}
+        <input
+          ref={editTitleRef}
+          type="text"
+          value={editTitle}
+          onChange={(e) => onEditTitleChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSave();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            } else if (e.key === "ArrowDown" || e.key === "Tab") {
+              // ↓ / Tab で期日編集へ移る。
+              e.preventDefault();
+              editDueRef.current?.focus();
+              editDueRef.current?.select();
+            }
+          }}
+          className="w-full rounded bg-base-800 border border-slate-600 px-2 py-1 text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+        />
+        {/* 期日編集（YYYYMMDD） */}
+        <div className="flex items-center gap-1">
+          <span className="text-[0.65rem] text-slate-500 shrink-0">期日</span>
+          <input
+            ref={editDueRef}
+            type="text"
+            inputMode="numeric"
+            maxLength={8}
+            placeholder="例: 20260930（空で期日なし）"
+            value={editDue}
+            onChange={(e) =>
+              onEditDueChange(e.target.value.replace(/\D/g, "").slice(0, 8))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onSave();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                onCancel();
+              } else if (e.key === "ArrowUp") {
+                // ↑ でタイトルへ戻る。
+                e.preventDefault();
+                editTitleRef.current?.focus();
+                editTitleRef.current?.select();
+              } else if (e.key === "Tab") {
+                // Tab はタイトルへ循環。
+                e.preventDefault();
+                editTitleRef.current?.focus();
+                editTitleRef.current?.select();
+              }
+            }}
+            className="flex-1 rounded bg-base-800 border border-slate-600 px-2 py-1 text-slate-100 font-mono text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[0.6rem] text-slate-500 font-mono">
+            Enter 保存 / Esc 取消 / ↓Tab 期日
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={onCancel}
+              className="text-[0.65rem] rounded bg-base-800 hover:bg-slate-700 px-2 py-1 text-slate-400 border border-slate-700"
+            >
+              取消
+            </button>
+            <button
+              onClick={onSave}
+              className="text-[0.65rem] rounded bg-accent/90 hover:bg-accent px-2 py-1 text-base-900 font-semibold"
+            >
+              保存
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- 通常表示 ---
   return (
     <div
       onClick={onSelect}
+      onDoubleClick={onStartEdit}
       className={`group rounded-lg border p-2.5 text-sm cursor-pointer transition ${
         selected
           ? "neon-ring border-accent/70 bg-base-700"

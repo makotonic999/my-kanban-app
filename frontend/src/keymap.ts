@@ -15,6 +15,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["↑", "↓"], description: "同じ列で選択を上下に移動" },
   { keys: ["←", "→"], description: "隣の列へ選択を移動" },
   { keys: ["Shift", "←/→"], description: "選択中のタスクを隣の列へ移動" },
+  { keys: ["F2"], description: "選択中タスクを編集（↓/Tab で期日へ・Enter 保存・Esc 取消）" },
   { keys: ["N"], description: "新しいタスクを追加（入力にフォーカス）" },
   { keys: ["Delete"], description: "選択中のタスクを削除" },
   { keys: ["Esc"], description: "選択を解除 / モーダルを閉じる" },
