@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -115,17 +116,42 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: INSERT tasks")
-	var t model.Task
-	err := h.DB.QueryRowContext(ctx,
-		`INSERT INTO tasks (user_id, title, description, estimated_minutes, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
-		userID, input.Title, input.Description, input.EstimatedMinutes, input.DueDate,
-	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
-	dbSpan.End()
+	tx, err := h.DB.BeginTx(ctx, nil)
 	if err != nil {
+		dbSpan.End()
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback() // Commit 済みなら no-op。エラー時は巻き戻す。
+
+	var t model.Task
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO tasks (user_id, title, description, estimated_minutes, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
+		userID, input.Title, input.Description, input.EstimatedMinutes, input.DueDate,
+	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 初回の状態遷移（from=NULL → 初期ステータス）を記録する。
+	if err := insertStatusEvent(ctx, tx, t.ID, nil, t.Status); err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dbSpan.End()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -206,18 +232,64 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	query += ` RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`
 
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: UPDATE tasks")
-	var t model.Task
-	err := h.DB.QueryRowContext(ctx, query, args...).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
-	dbSpan.End()
-	if err == sql.ErrNoRows {
-		http.Error(w, "task not found", http.StatusNotFound)
-		return
-	}
+	tx, err := h.DB.BeginTx(ctx, nil)
 	if err != nil {
+		dbSpan.End()
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback()
+
+	// 状態変化を検知するため、更新前の現在 status を取得（行ロックして競合を防ぐ）。
+	var oldStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		id, userID,
+	).Scan(&oldStatus)
+	if err == sql.ErrNoRows {
+		dbSpan.End()
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var t model.Task
+	err = tx.QueryRowContext(ctx, query, args...).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		dbSpan.End()
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// status が実際に変わったときだけ遷移イベントを記録する。
+	if input.Status != nil && t.Status != oldStatus {
+		if err := insertStatusEvent(ctx, tx, t.ID, &oldStatus, t.Status); err != nil {
+			dbSpan.End()
+			span.SetStatus(codes.Error, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dbSpan.End()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(t)
@@ -277,21 +349,67 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, dbSpan := otel.Tracer("task").Start(ctx, "db.query: UPDATE tasks")
-	var t model.Task
-	err := h.DB.QueryRowContext(ctx,
-		`UPDATE tasks SET status = 'done', completed_at = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
-		now, id, userID,
-	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
-	dbSpan.End()
-	if err == sql.ErrNoRows {
-		http.Error(w, "task not found", http.StatusNotFound)
-		return
-	}
+	tx, err := h.DB.BeginTx(ctx, nil)
 	if err != nil {
+		dbSpan.End()
 		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback()
+
+	// 遷移前の status を取得（行ロック）。
+	var oldStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		id, userID,
+	).Scan(&oldStatus)
+	if err == sql.ErrNoRows {
+		dbSpan.End()
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var t model.Task
+	err = tx.QueryRowContext(ctx,
+		`UPDATE tasks SET status = 'done', completed_at = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 RETURNING id, user_id, title, description, status, due_date, estimated_minutes, actual_minutes, completed_at, created_at, updated_at`,
+		now, id, userID,
+	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.EstimatedMinutes, &t.ActualMinutes, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		dbSpan.End()
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 既に done だった場合は状態変化なしなのでイベントは記録しない。
+	if oldStatus != "done" {
+		if err := insertStatusEvent(ctx, tx, t.ID, &oldStatus, "done"); err != nil {
+			dbSpan.End()
+			span.SetStatus(codes.Error, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		dbSpan.End()
+		span.SetStatus(codes.Error, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dbSpan.End()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(t)
@@ -412,4 +530,15 @@ func (h *TaskHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// insertStatusEvent は状態遷移イベントを 1 行記録する。
+// tasks の更新と同じトランザクション（tx）内で呼び、原子性を担保する。
+// from が nil のときは初回作成（from_status = NULL）を表す。
+func insertStatusEvent(ctx context.Context, tx *sql.Tx, taskID int64, from *string, to string) error {
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO task_status_events (task_id, from_status, to_status) VALUES ($1, $2, $3)`,
+		taskID, from, to,
+	)
+	return err
 }
