@@ -54,6 +54,10 @@ export function App() {
             <span>移動</span>
           </span>
           <span className="flex items-center gap-1">
+            <kbd className="kbd">F2</kbd>
+            <span>編集</span>
+          </span>
+          <span className="flex items-center gap-1">
             <kbd className="kbd">N</kbd>
             <span>新規</span>
           </span>
