@@ -87,11 +87,18 @@ func TestTaskCreate_UsesTokenUserID(t *testing.T) {
 	const me int64 = 42
 	const attacker int64 = 999 // ボディに混入させる他人のID
 
+	// Create はトランザクション内で「INSERT tasks → INSERT task_status_events」を行う。
 	// INSERT の第1引数（user_id）が me であることを保証。attacker であってはならない。
 	rows := newTaskRows().AddRow(10, me, "t", nil, "todo", nil, nil, nil, nil, time.Now(), time.Now())
+	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO tasks").
 		WithArgs(me, "t", nil, nil, nil).
 		WillReturnRows(rows)
+	// 初回の状態遷移イベント（from=NULL, to='todo'）を記録する。
+	mock.ExpectExec("INSERT INTO task_status_events").
+		WithArgs(int64(10), nil, "todo").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	h := &TaskHandler{DB: db}
 	// 悪意あるクライアントがボディに user_id を混ぜても無視されるべき。

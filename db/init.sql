@@ -43,3 +43,18 @@ CREATE TABLE task_tags (
 );
 
 CREATE INDEX idx_task_tags_tag_id ON task_tags (tag_id);
+
+-- タスクの状態遷移を時系列で記録する履歴テーブル。
+-- タスク作成時（to='todo', from=NULL）、status 変更時、完了時に 1 行ずつ追加する。
+-- フェーズ6（AI 年間振り返り）の素材: リードタイム/サイクルタイム/差し戻し回数などを後で集計する。
+CREATE TABLE task_status_events (
+    id          BIGSERIAL     PRIMARY KEY,
+    task_id     BIGINT        NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    from_status VARCHAR(50),                       -- 遷移前の状態（初回作成時は NULL）
+    to_status   VARCHAR(50)   NOT NULL,            -- 遷移後の状態
+    changed_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_tse_task_id    ON task_status_events (task_id);
+CREATE INDEX idx_tse_changed_at ON task_status_events (changed_at);
+
