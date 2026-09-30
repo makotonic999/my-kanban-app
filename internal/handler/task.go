@@ -532,8 +532,6 @@ func (h *TaskHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-
-
 // insertStatusEvent は状態遷移イベントを 1 行記録する。
 // tasks の更新と同じトランザクション（tx）内で呼び、原子性を担保する。
 // from が nil のときは初回作成（from_status = NULL）を表す。
