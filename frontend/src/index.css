@@ -1,3 +1,94 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+  ダーク & モダン & クールなテーマの基盤。
+  配色はディープなネイビー/スレート背景に、シアン〜エメラルドのネオン系アクセント。
+  「クールなダークターミナル」風の落ち着いた発光感を狙う。
+*/
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: #0b1120; /* ほぼ黒に近いディープネイビー */
+    color: #e2e8f0; /* slate-200 相当のやわらかい白 */
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ダーク背景に馴染むスクロールバー */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border-radius: 9999px;
+  }
+}
+
+@layer components {
+  /* ネオン発光するテキスト（見出し・アクセント用） */
+  .neon-text {
+    color: #67e8f9; /* cyan-300 */
+    text-shadow:
+      0 0 6px rgba(34, 211, 238, 0.55),
+      0 0 18px rgba(34, 211, 238, 0.25);
+  }
+
+  /* うっすら発光する枠線（選択カードなどに使う） */
+  .neon-ring {
+    box-shadow:
+      0 0 0 1px rgba(34, 211, 238, 0.7),
+      0 0 12px rgba(34, 211, 238, 0.35);
+  }
+
+  /* ガラス質のカード面（半透明＋ぼかし） */
+  .glass {
+    background-color: rgba(15, 23, 42, 0.6); /* slate-900/60 */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* キー表示用のキーキャップ風バッジ */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.375rem;
+    border: 1px solid #334155; /* slate-700 */
+    border-bottom-width: 2px;
+    background-color: #1e293b; /* slate-800 */
+    color: #cbd5e1; /* slate-300 */
+    font-size: 0.7rem;
+    line-height: 1.2rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: nowrap;
+  }
+}
+
+/* 背景にうっすらグリッドの発光（クールなターミナル感を出す装飾） */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
