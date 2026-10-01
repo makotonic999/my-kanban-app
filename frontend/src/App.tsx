@@ -19,16 +19,14 @@ export function App() {
     <div className="min-h-screen flex flex-col bg-base-900 bg-grid text-slate-200">
       <header className="border-b border-slate-800 bg-base-800/80 backdrop-blur">
         <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="flex items-center gap-2 font-bold">
-            <span className="font-mono text-accent">▚</span>
+          <h1 className="font-bold">
             <span className="neon-text tracking-wide">KANBAN</span>
-            <span className="text-slate-600 font-mono text-xs">/ board</span>
           </h1>
           <button
             onClick={handleLogout}
             className="text-sm text-slate-400 hover:text-accent transition"
           >
-            ログアウト
+            サインアウト
           </button>
         </div>
       </header>
