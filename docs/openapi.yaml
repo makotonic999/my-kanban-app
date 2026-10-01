@@ -26,6 +26,8 @@ tags:
     description: タスク CRUD とタスク-タグ関連
   - name: tags
     description: タグ CRUD
+  - name: user
+    description: ユーザー自身の設定（運用ルール）
   - name: ops
     description: 運用（メトリクス）
 
@@ -299,6 +301,50 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /me/rules:
+    get:
+      tags: [user]
+      summary: 自分の運用ルール取得
+      description: 認証ユーザー自身の運用ルール（自由テキスト）を返す。未設定時は空文字。
+      responses:
+        '200':
+          description: ルール
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [user]
+      summary: 自分の運用ルール保存（上書き）
+      description: 認証ユーザー自身の運用ルールを上書き保存する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRulesRequest'
+      responses:
+        '200':
+          description: 保存後のルール
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /metrics:
     get:
       tags: [ops]
@@ -520,6 +566,26 @@ components:
         name:
           type: string
           example: work
+
+    RulesResponse:
+      type: object
+      properties:
+        rules:
+          type: string
+          description: ユーザーが決めた運用ルール（自由テキスト・複数行可）
+          example: |
+            1. In Progress は4つ以上キープしない。
+            2. タスク名は一目でわかるように。
+
+    UpdateRulesRequest:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: string
+          description: 上書き保存する運用ルール（自由テキスト）
+          example: |
+            1. In Progress は4つ以上キープしない。
 
 # デフォルトで全エンドポイントに Bearer 認証を要求。
 # 未保護エンドポイントは各operationで security: [] を指定して上書きしている。
