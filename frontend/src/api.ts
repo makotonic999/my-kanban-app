@@ -114,3 +114,17 @@ export function completeTask(id: number): Promise<Task> {
 export function deleteTask(id: number): Promise<void> {
   return request<void>(`/tasks/${id}`, { method: "DELETE" });
 }
+
+// ---- ルール（ユーザーごとの運用ルール） ----
+export async function getRules(): Promise<string> {
+  const data = await request<{ rules: string }>("/me/rules", { method: "GET" });
+  return data.rules;
+}
+
+export async function updateRules(rules: string): Promise<string> {
+  const data = await request<{ rules: string }>("/me/rules", {
+    method: "PUT",
+    body: JSON.stringify({ rules }),
+  });
+  return data.rules;
+}
