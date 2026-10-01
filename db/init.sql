@@ -3,6 +3,7 @@ CREATE TABLE users (
     email           VARCHAR(255)  NOT NULL UNIQUE,
     password_digest VARCHAR(255)  NOT NULL,
     display_name    VARCHAR(100),
+    rules           TEXT          NOT NULL DEFAULT '',  -- ユーザーが自分で決める運用ルール（自由テキスト）
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );

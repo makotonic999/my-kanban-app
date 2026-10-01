@@ -17,6 +17,7 @@ import {
   yyyymmddToInputValue,
 } from "../format";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { Rules } from "./Rules";
 
 interface Props {
   onUnauthorized: () => void;
@@ -388,6 +389,9 @@ export function Board({ onUnauthorized }: Props) {
           {error}
         </p>
       )}
+
+      {/* ルールゾーン（タスク追加フォームの上） */}
+      <Rules onUnauthorized={onUnauthorized} />
 
       {/* 作成フォーム: タイトル + 期日（Enter で作成） */}
       <form

@@ -53,6 +53,8 @@ func main() {
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	// --- 保護対象エンドポイント（要 Bearer トークン） ---
+	mux.Handle("GET /me/rules", protect(userHandler.GetRules))
+	mux.Handle("PUT /me/rules", protect(userHandler.UpdateRules))
 	mux.Handle("GET /tasks", protect(taskHandler.List))
 	mux.Handle("POST /tasks", protect(taskHandler.Create))
 	mux.Handle("GET /tasks/{id}", protect(taskHandler.GetByID))
