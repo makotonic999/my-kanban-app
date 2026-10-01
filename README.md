@@ -36,12 +36,18 @@
 
 ### フェーズ 5：Webフロントエンド構築
 - [x] React + Vite + TypeScript + Tailwind CSS によるカンバンボードUI実装（3カラム / タスクCRUD）
-- [x] JWT認証フロー（ログイン・新規登録・トークン管理・401で自動ログアウト）
+- [x] JWT認証フロー（サインイン・サインアップ・トークン管理・401で自動サインアウト）
 - [x] CORS ミドルウェア（Go）追加 — フロント（別オリジン）からの API アクセスに対応
+- [x] ダーク & モダンな UI へ刷新（ネオン系アクセント・ガラス質カード・背景グリッド）
+- [x] キーボード操作（矢印で選択 / `Shift+←→` でステータス移動 / `N` 新規 / `F2` 編集 / `?` ヘルプ）
+- [x] 期日入力（`YYYYMMDD` テキスト + カレンダー併用）と期日の近い順ソート
+- [x] タスクのインライン編集（`F2` でその場編集）
+- [x] 運用ルールゾーン（カンバン上部に自分のルールを書き置き・DB保存）
 - [x] AWS S3 + CloudFront によるホスティングを Terraform 化（`terraform/frontend_hosting.tf`、`plan` 通過 = 56 to add）
 - [ ] 本番適用（`terraform apply`）でフロントを実配信 ※インフラ一式の apply とあわせて実施予定
 
 ### フェーズ 6：AI機能の実装 & データ基盤整備
+- [x] タスクの状態遷移を自動記録する `task_status_events`（リード/サイクルタイム・差し戻し回数の素材）
 - [ ] AI（LLM）が集計しやすいDB構造・クエリへのリファクタリング
 - [ ] 大量ダミーデータ（10万〜100万件）に対する集計クエリ最適化（`GROUP BY`、マテリアライズドビュー等）
 - [ ] LLM API（OpenAI / Gemini）と Go バックエンドの連携実装
@@ -57,13 +63,14 @@
 ---
 
 ## 📂 ドキュメント構成 (`/docs`)
+- [`docs/TUTORIAL.md`](docs/TUTORIAL.md): **プロダクト理解チュートリアル**（フロント→API→DB→インフラを網羅／まず最初に読む）
 - [`docs/db/users.md`](docs/db/users.md): usersテーブル定義書
 - [`docs/db/tasks.md`](docs/db/tasks.md): tasksテーブル定義書
 - [`docs/db/tags.md`](docs/db/tags.md): tags / task_tagsテーブル定義書
 - [`docs/db/erd.md`](docs/db/erd.md): ER図
 - [`docs/PROMETHEUS_METRICS.md`](docs/PROMETHEUS_METRICS.md): Prometheusメトリクス定義書
 - [`docs/SLO.md`](docs/SLO.md): SLO / エラー予算 定義書
-- [`docs/openapi.yaml`](docs/openapi.yaml): OpenAPI 3.0 APIドキュメント（全10パス・JWT Bearer認証）
+- [`docs/openapi.yaml`](docs/openapi.yaml): OpenAPI 3.0 APIドキュメント（全11パス・JWT Bearer認証）
 - [`docs/TEST_EVIDENCE.md`](docs/TEST_EVIDENCE.md): テストエビデンス（実行ログ・カバレッジ）
 - [`docs/HANDOVER.md`](docs/HANDOVER.md): 引継ぎドキュメント（開発進捗・次のステップ）
 
