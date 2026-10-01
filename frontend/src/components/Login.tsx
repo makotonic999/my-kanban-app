@@ -47,7 +47,7 @@ export function Login({ onAuthed }: Props) {
             KANBAN&nbsp;//&nbsp;{mode === "login" ? "SIGN IN" : "SIGN UP"}
           </p>
           <h1 className="text-2xl font-bold neon-text">
-            {mode === "login" ? "ログイン" : "アカウント作成"}
+            {mode === "login" ? "サインイン" : "サインアップ"}
           </h1>
         </div>
 
@@ -100,7 +100,7 @@ export function Login({ onAuthed }: Props) {
           disabled={busy}
           className="w-full rounded-lg bg-accent/90 hover:bg-accent text-base-900 py-2.5 font-semibold tracking-wide shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {busy ? "処理中..." : mode === "login" ? "ログイン" : "登録してログイン"}
+          {busy ? "処理中..." : mode === "login" ? "サインイン" : "登録してサインイン"}
         </button>
 
         <button
@@ -112,8 +112,8 @@ export function Login({ onAuthed }: Props) {
           className="w-full text-sm text-slate-400 hover:text-accent transition"
         >
           {mode === "login"
-            ? "アカウントを作成する"
-            : "既存アカウントでログイン"}
+            ? "アカウントを作成する（サインアップ）"
+            : "既存アカウントでサインイン"}
         </button>
       </form>
     </div>
