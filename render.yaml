@@ -1,0 +1,38 @@
+# Render Blueprint — API（Go バックエンド）を無料プランでデプロイする設定。
+#
+# この Blueprint は API サービス 1 つだけを定義する。
+#   - フロントは Cloudflare Pages（別サービス）で配信する。
+#   - DB は Neon（別サービス）を使う。接続文字列は DATABASE_URL に設定する。
+#
+# 使い方:
+#   Render ダッシュボード → New → Blueprint → このリポジトリを選択。
+#   render.yaml が検出され、下記の設定でサービスが作られる。
+#   sync: false の環境変数は、作成後にダッシュボードで値を入力する（秘密情報のため）。
+#
+# 注意（無料プランの挙動）:
+#   - 15 分アクセスがないとスリープし、次アクセスで起動に ~1 分かかる（コールドスタート）。
+#   - Render は PORT 環境変数を自動注入する。アプリは PORT を読んで待受する（main.go 対応済み）。
+
+services:
+  - type: web
+    name: my-kanban-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    # 認証不要で 200 を返す /metrics をヘルスチェックに使う（ALB 構成と同じ流用）。
+    healthCheckPath: /metrics
+    envVars:
+      # DB 接続文字列（Neon が発行するもの。sslmode=require を含む）。
+      # 秘密情報なのでダッシュボードで入力する。
+      - key: DATABASE_URL
+        sync: false
+      # JWT 署名鍵。Render の「Generate」で生成するか、自前の十分長いランダム値を入れる。
+      - key: JWT_SECRET
+        sync: false
+      # 許可するフロントのオリジン（Cloudflare Pages の URL）。
+      # 例: https://my-kanban-app.pages.dev  （確定後に設定）
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # オブザーバビリティ基盤は無料公開では未接続。空のままにする。
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: ""

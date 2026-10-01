@@ -73,6 +73,14 @@ func main() {
 	// CORS を最外層に適用し、プリフライト(OPTIONS)を認証より前に処理する。
 	handler := middleware.CORS(handlerWithMetrics)
 
-	fmt.Println("Server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handler))
+	// リッスンポートは PORT 環境変数を優先する（Render など PaaS は PORT を注入する）。
+	// 未設定ならローカル既定の 8080 を使う（後方互換）。
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+
+	fmt.Printf("Server running on %s\n", addr)
+	log.Fatal(http.ListenAndServe(addr, handler))
 }
