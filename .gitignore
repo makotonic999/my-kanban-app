@@ -2,3 +2,6 @@
 bin/
 cmd/api/app
 
+
+# 私的作業ログ（公開しない）
+docs/dev-log/
