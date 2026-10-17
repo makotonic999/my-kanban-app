@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -45,8 +46,13 @@ func TestCORS_Preflight(t *testing.T) {
 	if called {
 		t.Fatal("next handler must not be called for OPTIONS preflight")
 	}
-	if rec.Header().Get("Access-Control-Allow-Methods") == "" {
+	allowMethods := rec.Header().Get("Access-Control-Allow-Methods")
+	if allowMethods == "" {
 		t.Fatal("expected Access-Control-Allow-Methods header on preflight")
+	}
+	// PUT /me/rules を保存で使うため、プリフライトで PUT が許可されている必要がある。
+	if !strings.Contains(allowMethods, "PUT") {
+		t.Fatalf("Access-Control-Allow-Methods = %q, want it to include PUT", allowMethods)
 	}
 }
 
