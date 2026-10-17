@@ -13,8 +13,9 @@ import {
   formatDueDate,
   isOverdue,
   inputValueToYyyymmdd,
-  parseYyyymmdd,
   yyyymmddToInputValue,
+  yyyymmddToUtcIso,
+  dueToYyyymmdd,
 } from "../format";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { Rules } from "./Rules";
@@ -106,15 +107,14 @@ export function Board({ onUnauthorized }: Props) {
     // 期日: "20260930" 形式。空欄は期日なし。不正な値はエラーにして中断。
     let dueIso: string | null = null;
     if (due.trim()) {
-      const parsed = parseYyyymmdd(due);
-      if (!parsed) {
+      dueIso = yyyymmddToUtcIso(due);
+      if (!dueIso) {
         setError(
           "期日は YYYYMMDD 形式で入力してください（例: 20260930）。存在しない日付は登録できません。",
         );
         dueInputRef.current?.focus();
         return;
       }
-      dueIso = parsed.toISOString();
     }
 
     try {
@@ -159,7 +159,7 @@ export function Board({ onUnauthorized }: Props) {
   function startEdit(task: Task) {
     setEditingId(task.id);
     setEditTitle(task.title);
-    setEditDue(task.due_date ? yyyymmddToInputValue(task.due_date).replace(/-/g, "") : "");
+    setEditDue(dueToYyyymmdd(task.due_date));
     setError(null);
   }
 
@@ -180,21 +180,18 @@ export function Board({ onUnauthorized }: Props) {
     // 期日: 空欄は「期日なし」。入力ありは YYYYMMDD を検証。
     let newDueIso: string | null = null;
     if (editDue.trim()) {
-      const parsed = parseYyyymmdd(editDue);
-      if (!parsed) {
+      newDueIso = yyyymmddToUtcIso(editDue);
+      if (!newDueIso) {
         setError(
           "期日は YYYYMMDD 形式で入力してください（例: 20260930）。存在しない日付は登録できません。",
         );
         return;
       }
-      newDueIso = parsed.toISOString();
     }
 
     const patch: { title?: string; due_date?: string | null } = {};
     if (newTitle !== task.title) patch.title = newTitle;
-    const oldDueYmd = task.due_date
-      ? yyyymmddToInputValue(task.due_date).replace(/-/g, "")
-      : "";
+    const oldDueYmd = dueToYyyymmdd(task.due_date);
     if (editDue.trim() !== oldDueYmd) patch.due_date = newDueIso;
 
     // 変更がなければ API を叩かずに閉じる。
